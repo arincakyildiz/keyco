@@ -13,6 +13,17 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+server.log
+server_*.log
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# SMTP and sensitive config files
+README_SMTP.txt
+*.txt
 
 # Runtime data
 pids
