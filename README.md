@@ -1,6 +1,6 @@
 # 🎮 Keyco - Gaming Store
 
-**Keyco**, oyun kodları, hediye kartları ve dijital ürünler satan modern bir e-ticaret platformudur. Anında teslimat, güvenli ödeme ve 7/24 destek ile oyunculara en iyi deneyimi sunar.
+**Keyco**, oyun kodları, hediye kartları ve dijital ürünler satan modern bir e-ticaret platformudur. Anında teslimat, güvenli ödeme ve 7/24 destek ile oyunculara en iyi deneyimi sunar
 
 ## ✨ Özellikler
 
