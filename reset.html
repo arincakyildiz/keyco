@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Şifre Sıfırlama - Keyco</title>
+  <link rel="stylesheet" href="styles.css?v=3" />
+</head>
+<body>
+  <div class="admin-login" style="max-width:520px;margin-top:60px;">
+    <h2>Şifre Sıfırlama</h2>
+    <div class="form-group">
+      <label>Yeni Şifre</label>
+      <input type="password" id="newPass" />
+    </div>
+    <div class="form-group">
+      <label>Yeni Şifre (Tekrar)</label>
+      <input type="password" id="newPass2" />
+    </div>
+    <div class="admin-actions">
+      <button class="btn primary" id="btnReset">Sıfırla</button>
+    </div>
+    <p id="resetStatus" style="margin-top:12px;"></p>
+  </div>
+  <script>
+    document.getElementById('btnReset').addEventListener('click', async () => {
+      const p = new URLSearchParams(location.search);
+      const token = p.get('token');
+      const s = document.getElementById('resetStatus');
+      const a = document.getElementById('newPass').value;
+      const b = document.getElementById('newPass2').value;
+      if (!token) { s.textContent = 'Geçersiz bağlantı.'; return; }
+      if (!a || a !== b || a.length < 6) { s.textContent = 'Şifre geçersiz veya eşleşmiyor.'; return; }
+      try {
+        const res = await fetch('/api/auth/reset/perform', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password: a }) });
+        const data = await res.json().catch(() => ({}));
+        s.textContent = res.ok ? 'Şifre güncellendi. Giriş yapabilirsiniz.' : ('Hata: ' + (data.error || 'bilinmeyen'));
+      } catch (e) {
+        s.textContent = 'Ağ hatası.';
+      }
+    });
+  </script>
+</body>
+</html>
+
+
