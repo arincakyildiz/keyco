@@ -1,14 +1,6 @@
 # Node modules
 node_modules/
-
-# Logs
-*.log
-server*.log
-
-# Database files (kişisel veriler)
-*.sqlite
-*.db
-data.json
+npm-debug.log*
 
 # Environment variables (kişisel veriler)
 .env
@@ -16,8 +8,15 @@ data.json
 .env.production
 .env.*
 
-# Kişisel veri dosyaları
+# Database files (kişisel veriler)
+*.sqlite
+*.db
 data.json
+data.sqlite
+
+# Logs
+*.log
+server*.log
 server.log
 server_5501.log
 

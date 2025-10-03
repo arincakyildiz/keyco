@@ -1,0 +1,19 @@
+{
+    "contacts": [],
+    "faqs": [
+        {
+            "id": 1,
+            "q_tr": "Kodlar nasıl teslim edilir?",
+            "q_en": "How are codes delivered?",
+            "a_tr": "Ödemeden sonra e-posta ile anında.",
+            "a_en": "Instantly via email after payment."
+        },
+        {
+            "id": 2,
+            "q_tr": "İade politikası nedir?",
+            "q_en": "What is the refund policy?",
+            "a_tr": "Kullanılmamış kodlarda 14 gün içinde iade.",
+            "a_en": "Refunds within 14 days for unused codes."
+        }
+    ]
+}
