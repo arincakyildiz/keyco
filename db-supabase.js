@@ -304,7 +304,7 @@ async function seedData() {
         { name: 'League of Legends RP 2800', slug: 'lol-rp-2800', description: '2800 League of Legends RP', price: 60000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
         { name: 'League of Legends RP 3100', slug: 'lol-rp-3100', description: '3100 League of Legends RP', price: 50000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
         { name: 'League of Legends RP 5000', slug: 'lol-rp-5000', description: '5000 League of Legends RP', price: 100000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'high', discount: 0, image_url: 'rp.png' },
-        { name: 'LoL Rastgele RP', slug: 'lol-random-rp', description: 'LoL rastgele RP kodu', price: 4000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rpex.png' },
+        { name: 'LoL Rastgele RP', slug: 'lol-random-rp', description: 'LoL rastgele RP kodu', price: 4000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp.png' },
         
         // LoL Rastgele RP Paketleri (3 ayrı paket: düşük, orta, yüksek)
         { name: 'LoL Rastgele RP (Düşük Paket)', slug: 'lol-rp-random-dusuk', description: 'LoL Rastgele RP - Düşük Paket', price: 20000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rpex.png' },
