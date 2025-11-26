@@ -1351,10 +1351,8 @@ app.get('/api/products', async (req, res) => {
             
             // Category filter (case-insensitive)
             if (category && category !== 'all') {
-                // Convert to lowercase for case-insensitive matching
-                const categoryLower = category.toLowerCase();
-                // Use or() to match both lowercase and original case
-                query = query.or(`category.ilike.${categoryLower},category.eq.${category}`);
+                // Use ilike for case-insensitive matching (Supabase ilike is case-insensitive)
+                query = query.ilike('category', category);
             }
             
             // Platform filter
