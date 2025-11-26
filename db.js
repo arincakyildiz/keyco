@@ -1,3 +1,14 @@
+// Check if Supabase is configured
+const useSupabase = !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (useSupabase) {
+  // Use Supabase
+  console.log('🔄 Using Supabase database');
+  module.exports = require('./db-supabase.js');
+} else {
+  // Use SQLite (fallback)
+  console.log('🔄 Using SQLite database (Supabase not configured)');
+  
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
@@ -550,5 +561,6 @@ if (couponCount === 0) {
 }
 
 module.exports = db;
+} // End of SQLite block
 
 

@@ -189,30 +189,61 @@ app.post('/api/auth/register', [
     body('name').trim().isLength({ min: 2 }).withMessage('name'),
     body('email').isEmail().withMessage('email'),
     body('password').isLength({ min: 8 }).matches(/^(?=.*[A-Z])(?=.*[\W_]).+$/).withMessage('password')
-], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        }
+        const { name, email, password } = req.body;
+        
+        let existsUser, existsPending;
+        if (db.supabase) {
+            const { data: userData } = await db.supabase.from('users').select('id').eq('email', email).single();
+            existsUser = userData;
+            const { data: pendingData } = await db.supabase.from('pending_users').select('id').eq('email', email).single();
+            existsPending = pendingData;
+        } else {
+            existsUser = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+            existsPending = await db.prepare('SELECT id FROM pending_users WHERE email = ?').get(email);
+        }
+        
+        if (existsUser) return res.status(409).json({ ok: false, error: 'email_exists' });
+        
+        const hash = bcrypt.hashSync(password, 10);
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
+        
+        if (existsPending) {
+            if (db.supabase) {
+                await db.supabase
+                    .from('pending_users')
+                    .update({ name, password_hash: hash, code, expires_at: expires })
+                    .eq('email', email);
+            } else {
+                await db.prepare('UPDATE pending_users SET name=?, password_hash=?, code=?, expires_at=? WHERE email=?').run(name, hash, code, expires, email);
+            }
+        } else {
+            if (db.supabase) {
+                await db.supabase
+                    .from('pending_users')
+                    .insert({ name, email, password_hash: hash, code, expires_at: expires });
+            } else {
+                await db.prepare('INSERT INTO pending_users (name, email, password_hash, code, expires_at) VALUES (?, ?, ?, ?, ?)')
+                  .run(name, email, hash, code, expires);
+            }
+        }
+        
+        // Dev ortamında kolay test için konsola yaz
+        if ((process.env.NODE_ENV || 'development') !== 'production') {
+            console.log('DEBUG REGISTER CODE:', email, code);
+        }
+        sendMailSafe({ to: email, subject: 'Keyco - E-posta Doğrulama Kodu', text: `Doğrulama kodunuz: ${code}. Bu kod 24 saat geçerlidir.` });
+        res.json({ ok: true, message: 'verification_required' });
+    } catch (error) {
+        console.error('Register error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    const { name, email, password } = req.body;
-    const existsUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (existsUser) return res.status(409).json({ ok: false, error: 'email_exists' });
-    const existsPending = db.prepare('SELECT id FROM pending_users WHERE email = ?').get(email);
-    const hash = bcrypt.hashSync(password, 10);
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
-    if (existsPending) {
-        db.prepare('UPDATE pending_users SET name=?, password_hash=?, code=?, expires_at=? WHERE email=?').run(name, hash, code, expires, email);
-    } else {
-        db.prepare('INSERT INTO pending_users (name, email, password_hash, code, expires_at) VALUES (?, ?, ?, ?, ?)')
-          .run(name, email, hash, code, expires);
-    }
-    // Dev ortamında kolay test için konsola yaz
-    if ((process.env.NODE_ENV || 'development') !== 'production') {
-        console.log('DEBUG REGISTER CODE:', email, code);
-    }
-    sendMailSafe({ to: email, subject: 'Keyco - E-posta Doğrulama Kodu', text: `Doğrulama kodunuz: ${code}. Bu kod 24 saat geçerlidir.` });
-    res.json({ ok: true, message: 'verification_required' });
 });
 
 // Confirm registration code -> create real user and sign in
@@ -685,78 +716,125 @@ app.get('/api/admin/products', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Public products endpoint
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
     const { search, category, min_price, max_price, platform, sort_by, sort_order, package_level } = req.query;
     
-    let whereClause = 'WHERE 1=1';
-    let params = [];
-    
-    // Search filter (name, description, description_en, slug)
-    if (search && search.trim()) {
-        whereClause += ` AND (name LIKE ? OR description LIKE ? OR description_en LIKE ? OR slug LIKE ?)`;
-        const searchTerm = `%${search.trim()}%`;
-        params.push(searchTerm, searchTerm, searchTerm, searchTerm);
-    }
-    
-    // Category filter
-    if (category && category !== 'all') {
-        whereClause += ` AND category = ?`;
-        params.push(category);
-    }
-    
-    // Platform filter
-    if (platform && platform !== 'all') {
-        whereClause += ` AND platform = ?`;
-        params.push(platform);
-    }
-    
-    // Package level filter
-    if (package_level && package_level !== 'all') {
-        whereClause += ` AND package_level = ?`;
-        params.push(package_level);
-    }
-    
-    // Price range filter
-    if (min_price && !isNaN(min_price)) {
-        whereClause += ` AND price >= ?`;
-        params.push(parseInt(min_price));
-    }
-    
-    if (max_price && !isNaN(max_price)) {
-        whereClause += ` AND price <= ?`;
-        params.push(parseInt(max_price));
-    }
-    
-    // Price range filter (alternative format: "0-50", "50-100", etc.)
-    if (req.query.price_range && req.query.price_range.includes('-')) {
-        const [min, max] = req.query.price_range.split('-');
-        if (min && !isNaN(min)) {
-            whereClause += ` AND price >= ?`;
-            params.push(parseInt(min));
-        }
-        if (max && !isNaN(max)) {
-            whereClause += ` AND price <= ?`;
-            params.push(parseInt(max));
-        }
-    }
-    
-    // Sorting
-    let orderClause = 'ORDER BY id DESC';
-    if (sort_by && ['name', 'price', 'created_at'].includes(sort_by)) {
-        const order = sort_order === 'asc' ? 'ASC' : 'DESC';
-        orderClause = `ORDER BY ${sort_by} ${order}`;
-    }
-    
-    const query = `
-        SELECT id, name, slug, price, currency, category, platform, package_level, description, description_en, discount, image_url, created_at
-        FROM products
-        ${whereClause}
-        ${orderClause}
-    `;
-    
     try {
-        const rows = db.prepare(query).all(...params);
-        res.json({ ok: true, items: rows, total: rows.length });
+        // Check if using Supabase
+        if (db.supabase) {
+            let query = db.supabase
+                .from('products')
+                .select('id, name, slug, price, currency, category, platform, package_level, description, description_en, discount, image_url, created_at');
+            
+            // Search filter
+            if (search && search.trim()) {
+                const searchTerm = `%${search.trim()}%`;
+                query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
+            }
+            
+            // Category filter
+            if (category && category !== 'all') {
+                query = query.eq('category', category);
+            }
+            
+            // Platform filter
+            if (platform && platform !== 'all') {
+                query = query.eq('platform', platform);
+            }
+            
+            // Package level filter
+            if (package_level && package_level !== 'all') {
+                query = query.eq('package_level', package_level);
+            }
+            
+            // Price range filter
+            if (min_price && !isNaN(min_price)) {
+                query = query.gte('price', parseInt(min_price));
+            }
+            if (max_price && !isNaN(max_price)) {
+                query = query.lte('price', parseInt(max_price));
+            }
+            
+            // Price range filter (alternative format)
+            if (req.query.price_range && req.query.price_range.includes('-')) {
+                const [min, max] = req.query.price_range.split('-');
+                if (min && !isNaN(min)) {
+                    query = query.gte('price', parseInt(min));
+                }
+                if (max && !isNaN(max)) {
+                    query = query.lte('price', parseInt(max));
+                }
+            }
+            
+            // Sorting
+            if (sort_by && ['name', 'price', 'created_at'].includes(sort_by)) {
+                query = query.order(sort_by, { ascending: sort_order === 'asc' });
+            } else {
+                query = query.order('id', { ascending: false });
+            }
+            
+            const { data: rows, error } = await query;
+            if (error) throw error;
+            
+            res.json({ ok: true, items: rows || [], total: rows?.length || 0 });
+        } else {
+            // SQLite fallback
+            let whereClause = 'WHERE 1=1';
+            let params = [];
+            
+            if (search && search.trim()) {
+                whereClause += ` AND (name LIKE ? OR description LIKE ? OR description_en LIKE ? OR slug LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+            }
+            if (category && category !== 'all') {
+                whereClause += ` AND category = ?`;
+                params.push(category);
+            }
+            if (platform && platform !== 'all') {
+                whereClause += ` AND platform = ?`;
+                params.push(platform);
+            }
+            if (package_level && package_level !== 'all') {
+                whereClause += ` AND package_level = ?`;
+                params.push(package_level);
+            }
+            if (min_price && !isNaN(min_price)) {
+                whereClause += ` AND price >= ?`;
+                params.push(parseInt(min_price));
+            }
+            if (max_price && !isNaN(max_price)) {
+                whereClause += ` AND price <= ?`;
+                params.push(parseInt(max_price));
+            }
+            if (req.query.price_range && req.query.price_range.includes('-')) {
+                const [min, max] = req.query.price_range.split('-');
+                if (min && !isNaN(min)) {
+                    whereClause += ` AND price >= ?`;
+                    params.push(parseInt(min));
+                }
+                if (max && !isNaN(max)) {
+                    whereClause += ` AND price <= ?`;
+                    params.push(parseInt(max));
+                }
+            }
+            
+            let orderClause = 'ORDER BY id DESC';
+            if (sort_by && ['name', 'price', 'created_at'].includes(sort_by)) {
+                const order = sort_order === 'asc' ? 'ASC' : 'DESC';
+                orderClause = `ORDER BY ${sort_by} ${order}`;
+            }
+            
+            const query = `
+                SELECT id, name, slug, price, currency, category, platform, package_level, description, description_en, discount, image_url, created_at
+                FROM products
+                ${whereClause}
+                ${orderClause}
+            `;
+            
+            const rows = db.prepare(query).all(...params);
+            res.json({ ok: true, items: rows, total: rows.length });
+        }
     } catch (error) {
         console.error('Products query error:', error);
         res.status(500).json({ ok: false, error: 'database_error' });
@@ -1334,134 +1412,361 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Favorites API
-app.get('/api/favorites', requireAuth, (req, res) => {
-    // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
-    const featuredToNormalIdMap = {
-        57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
-        58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
-        59: 58,  // Elden Ring → Elden Ring (ID: 58)
-        60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
-        61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
-        62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
-    };
-    
-    const rows = db.prepare(`
-        SELECT p.id, p.name, p.slug, p.description, p.description_en, p.price, p.currency, p.category, p.platform, p.package_level, p.discount, p.image_url, f.created_at AS favorited_at
-        FROM favorites f
-        JOIN products p ON p.id = f.product_id
-        WHERE f.user_id = ?
-        ORDER BY f.id DESC
-    `).all(req.user.id);
-    
-    // ID'leri öne çıkan ürün ID'leriyle eşleştir
-    const mappedRows = rows.map(row => {
-        const featuredId = Object.keys(featuredToNormalIdMap).find(key => featuredToNormalIdMap[key] === row.id);
-        return {
-            ...row,
-            id: featuredId ? parseInt(featuredId) : row.id
+app.get('/api/favorites', requireAuth, async (req, res) => {
+    try {
+        // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
+        const featuredToNormalIdMap = {
+            57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
+            58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
+            59: 58,  // Elden Ring → Elden Ring (ID: 58)
+            60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
+            61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
+            62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
         };
-    });
-    
-    res.json({ ok: true, items: mappedRows });
+        
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('favorites')
+                .select(`
+                    id,
+                    created_at,
+                    products (
+                        id,
+                        name,
+                        slug,
+                        description,
+                        description_en,
+                        price,
+                        currency,
+                        category,
+                        platform,
+                        package_level,
+                        discount,
+                        image_url
+                    )
+                `)
+                .eq('user_id', req.user.id)
+                .order('id', { ascending: false });
+            
+            if (error) throw error;
+            
+            rows = (data || []).map(fav => ({
+                id: fav.products.id,
+                name: fav.products.name,
+                slug: fav.products.slug,
+                description: fav.products.description,
+                description_en: fav.products.description_en,
+                price: fav.products.price,
+                currency: fav.products.currency,
+                category: fav.products.category,
+                platform: fav.products.platform,
+                package_level: fav.products.package_level,
+                discount: fav.products.discount,
+                image_url: fav.products.image_url,
+                favorited_at: fav.created_at
+            }));
+        } else {
+            rows = await db.prepare(`
+                SELECT p.id, p.name, p.slug, p.description, p.description_en, p.price, p.currency, p.category, p.platform, p.package_level, p.discount, p.image_url, f.created_at AS favorited_at
+                FROM favorites f
+                JOIN products p ON p.id = f.product_id
+                WHERE f.user_id = ?
+                ORDER BY f.id DESC
+            `).all(req.user.id);
+        }
+        
+        // ID'leri öne çıkan ürün ID'leriyle eşleştir
+        const mappedRows = rows.map(row => {
+            const featuredId = Object.keys(featuredToNormalIdMap).find(key => featuredToNormalIdMap[key] === row.id);
+            return {
+                ...row,
+                id: featuredId ? parseInt(featuredId) : row.id
+            };
+        });
+        
+        res.json({ ok: true, items: mappedRows });
+    } catch (error) {
+        console.error('Favorites fetch error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
-app.post('/api/favorites/:productId', requireAuth, (req, res) => {
-    // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
-    const featuredToNormalIdMap = {
-        57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
-        58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
-        59: 58,  // Elden Ring → Elden Ring (ID: 58)
-        60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
-        61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
-        62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
-    };
-    
-    const featuredProductId = Number(req.params.productId);
-    const actualProductId = featuredToNormalIdMap[featuredProductId] || featuredProductId;
-    
-    const p = db.prepare('SELECT id FROM products WHERE id = ?').get(actualProductId);
-    if (!p) return res.status(404).json({ ok: false, error: 'product_not_found' });
+app.post('/api/favorites/:productId', requireAuth, async (req, res) => {
     try {
-        db.prepare('INSERT OR IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)').run(req.user.id, actualProductId);
+        // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
+        const featuredToNormalIdMap = {
+            57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
+            58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
+            59: 58,  // Elden Ring → Elden Ring (ID: 58)
+            60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
+            61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
+            62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
+        };
+        
+        const featuredProductId = Number(req.params.productId);
+        const actualProductId = featuredToNormalIdMap[featuredProductId] || featuredProductId;
+        
+        let p;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('id')
+                .eq('id', actualProductId)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'product_not_found' });
+            p = data;
+        } else {
+            p = await db.prepare('SELECT id FROM products WHERE id = ?').get(actualProductId);
+        }
+        
+        if (!p) return res.status(404).json({ ok: false, error: 'product_not_found' });
+        
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('favorites')
+                .insert({ user_id: req.user.id, product_id: actualProductId })
+                .select();
+            if (error && error.code !== '23505') throw error; // Ignore duplicate key error
+        } else {
+            await db.prepare('INSERT OR IGNORE INTO favorites (user_id, product_id) VALUES (?, ?)').run(req.user.id, actualProductId);
+        }
+        
         res.json({ ok: true });
     } catch (e) {
+        console.error('Favorite add error:', e);
         res.status(500).json({ ok: false, error: 'favorite_failed' });
     }
 });
 
-app.delete('/api/favorites/:productId', requireAuth, (req, res) => {
-    // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
-    const featuredToNormalIdMap = {
-        57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
-        58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
-        59: 58,  // Elden Ring → Elden Ring (ID: 58)
-        60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
-        61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
-        62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
-    };
-    
-    const featuredProductId = Number(req.params.productId);
-    const actualProductId = featuredToNormalIdMap[featuredProductId] || featuredProductId;
-    
-    db.prepare('DELETE FROM favorites WHERE user_id = ? AND product_id = ?').run(req.user.id, actualProductId);
-    res.json({ ok: true });
+app.delete('/api/favorites/:productId', requireAuth, async (req, res) => {
+    try {
+        // Öne çıkan ürün ID'lerini normal ürün ID'leriyle eşleştir
+        const featuredToNormalIdMap = {
+            57: 56,  // Cyberpunk 2077 → Cyberpunk 2077
+            58: 12,  // Valorant 3650 VP → Valorant 3650 VP  
+            59: 58,  // Elden Ring → Elden Ring (ID: 58)
+            60: 40,  // Steam Oyun Kodu (Düşük Paket) → Steam Oyun Kodu (Düşük Paket)
+            61: 30,  // League of Legends 2800 RP → League of Legends 2800 RP
+            62: 41   // Steam Oyun Kodu (Orta Paket) → Steam Oyun Kodu (Orta Paket)
+        };
+        
+        const featuredProductId = Number(req.params.productId);
+        const actualProductId = featuredToNormalIdMap[featuredProductId] || featuredProductId;
+        
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('favorites')
+                .delete()
+                .eq('user_id', req.user.id)
+                .eq('product_id', actualProductId);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM favorites WHERE user_id = ? AND product_id = ?').run(req.user.id, actualProductId);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Favorite delete error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Cart API
-app.get('/api/cart', requireAuth, (req, res) => {
-    const rows = db.prepare(`
-        SELECT p.id, p.name, p.slug, p.description, p.description_en, p.price, p.currency, p.category, p.platform, p.package_level, p.discount, p.image_url, c.quantity, c.created_at AS added_at
-        FROM cart_items c
-        JOIN products p ON p.id = c.product_id
-        WHERE c.user_id = ?
-        ORDER BY c.id DESC
-    `).all(req.user.id);
-    
-    const total = rows.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    res.json({ ok: true, items: rows, total });
+app.get('/api/cart', requireAuth, async (req, res) => {
+    try {
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('cart_items')
+                .select(`
+                    id,
+                    quantity,
+                    created_at,
+                    products (
+                        id,
+                        name,
+                        slug,
+                        description,
+                        description_en,
+                        price,
+                        currency,
+                        category,
+                        platform,
+                        package_level,
+                        discount,
+                        image_url
+                    )
+                `)
+                .eq('user_id', req.user.id)
+                .order('id', { ascending: false });
+            
+            if (error) throw error;
+            
+            rows = (data || []).map(cart => ({
+                id: cart.products.id,
+                name: cart.products.name,
+                slug: cart.products.slug,
+                description: cart.products.description,
+                description_en: cart.products.description_en,
+                price: cart.products.price,
+                currency: cart.products.currency,
+                category: cart.products.category,
+                platform: cart.products.platform,
+                package_level: cart.products.package_level,
+                discount: cart.products.discount,
+                image_url: cart.products.image_url,
+                quantity: cart.quantity,
+                added_at: cart.created_at
+            }));
+        } else {
+            rows = await db.prepare(`
+                SELECT p.id, p.name, p.slug, p.description, p.description_en, p.price, p.currency, p.category, p.platform, p.package_level, p.discount, p.image_url, c.quantity, c.created_at AS added_at
+                FROM cart_items c
+                JOIN products p ON p.id = c.product_id
+                WHERE c.user_id = ?
+                ORDER BY c.id DESC
+            `).all(req.user.id);
+        }
+        
+        const total = rows.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        res.json({ ok: true, items: rows, total });
+    } catch (error) {
+        console.error('Cart fetch error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
-app.post('/api/cart/:productId', requireAuth, (req, res) => {
-    const productId = Number(req.params.productId);
-    const quantity = Number(req.body.quantity) || 1;
-    
-    const p = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
-    if (!p) return res.status(404).json({ ok: false, error: 'product_not_found' });
-    
+app.post('/api/cart/:productId', requireAuth, async (req, res) => {
     try {
-        db.prepare(`
-            INSERT INTO cart_items (user_id, product_id, quantity) 
-            VALUES (?, ?, ?) 
-            ON CONFLICT(user_id, product_id) 
-            DO UPDATE SET quantity = quantity + ?
-        `).run(req.user.id, productId, quantity, quantity);
+        const productId = Number(req.params.productId);
+        const quantity = Number(req.body.quantity) || 1;
+        
+        let p;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('id')
+                .eq('id', productId)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'product_not_found' });
+            p = data;
+        } else {
+            p = await db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+        }
+        
+        if (!p) return res.status(404).json({ ok: false, error: 'product_not_found' });
+        
+        if (db.supabase) {
+            // Check if item exists
+            const { data: existing } = await db.supabase
+                .from('cart_items')
+                .select('id, quantity')
+                .eq('user_id', req.user.id)
+                .eq('product_id', productId)
+                .single();
+            
+            if (existing) {
+                // Update quantity
+                const { error } = await db.supabase
+                    .from('cart_items')
+                    .update({ quantity: existing.quantity + quantity })
+                    .eq('id', existing.id);
+                if (error) throw error;
+            } else {
+                // Insert new
+                const { error } = await db.supabase
+                    .from('cart_items')
+                    .insert({ user_id: req.user.id, product_id: productId, quantity });
+                if (error) throw error;
+            }
+        } else {
+            await db.prepare(`
+                INSERT INTO cart_items (user_id, product_id, quantity) 
+                VALUES (?, ?, ?) 
+                ON CONFLICT(user_id, product_id) 
+                DO UPDATE SET quantity = quantity + ?
+            `).run(req.user.id, productId, quantity, quantity);
+        }
+        
         res.json({ ok: true });
     } catch (e) {
+        console.error('Cart add error:', e);
         res.status(500).json({ ok: false, error: 'cart_add_failed' });
     }
 });
 
-app.put('/api/cart/:productId', requireAuth, (req, res) => {
-    const productId = Number(req.params.productId);
-    const quantity = Number(req.body.quantity);
-    
-    if (quantity <= 0) {
-        db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?').run(req.user.id, productId);
-    } else {
-        db.prepare('UPDATE cart_items SET quantity = ? WHERE user_id = ? AND product_id = ?').run(quantity, req.user.id, productId);
+app.put('/api/cart/:productId', requireAuth, async (req, res) => {
+    try {
+        const productId = Number(req.params.productId);
+        const quantity = Number(req.body.quantity);
+        
+        if (quantity <= 0) {
+            if (db.supabase) {
+                const { error } = await db.supabase
+                    .from('cart_items')
+                    .delete()
+                    .eq('user_id', req.user.id)
+                    .eq('product_id', productId);
+                if (error) throw error;
+            } else {
+                await db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?').run(req.user.id, productId);
+            }
+        } else {
+            if (db.supabase) {
+                const { error } = await db.supabase
+                    .from('cart_items')
+                    .update({ quantity })
+                    .eq('user_id', req.user.id)
+                    .eq('product_id', productId);
+                if (error) throw error;
+            } else {
+                await db.prepare('UPDATE cart_items SET quantity = ? WHERE user_id = ? AND product_id = ?').run(quantity, req.user.id, productId);
+            }
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Cart update error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    res.json({ ok: true });
 });
 
-app.delete('/api/cart/:productId', requireAuth, (req, res) => {
-    const productId = Number(req.params.productId);
-    db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?').run(req.user.id, productId);
-    res.json({ ok: true });
+app.delete('/api/cart/:productId', requireAuth, async (req, res) => {
+    try {
+        const productId = Number(req.params.productId);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('cart_items')
+                .delete()
+                .eq('user_id', req.user.id)
+                .eq('product_id', productId);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM cart_items WHERE user_id = ? AND product_id = ?').run(req.user.id, productId);
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Cart delete error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
-app.delete('/api/cart', requireAuth, (req, res) => {
-    db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
-    res.json({ ok: true });
+app.delete('/api/cart', requireAuth, async (req, res) => {
+    try {
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('cart_items')
+                .delete()
+                .eq('user_id', req.user.id);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM cart_items WHERE user_id = ?').run(req.user.id);
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Cart clear error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Product Reviews API
@@ -1932,15 +2237,26 @@ app.get('/api/admin/support/ratings', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Public featured products endpoint (for main page)
-app.get('/api/featured', (req, res) => {
+app.get('/api/featured', async (req, res) => {
     try {
-        const stmt = db.prepare(`
-            SELECT * FROM featured_products 
-            ORDER BY display_order ASC
-        `);
-        
-        const featured = stmt.all();
-        res.json({ ok: true, items: featured });
+        // Check if using Supabase
+        if (db.supabase) {
+            const { data: featured, error } = await db.supabase
+                .from('featured_products')
+                .select('*')
+                .order('display_order', { ascending: true });
+            
+            if (error) throw error;
+            res.json({ ok: true, items: featured || [] });
+        } else {
+            // SQLite fallback
+            const stmt = db.prepare(`
+                SELECT * FROM featured_products 
+                ORDER BY display_order ASC
+            `);
+            const featured = stmt.all();
+            res.json({ ok: true, items: featured });
+        }
     } catch (error) {
         console.error('Featured products fetch error:', error);
         res.status(500).json({ ok: false, error: 'database_error' });
