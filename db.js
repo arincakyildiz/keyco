@@ -9,8 +9,20 @@ const isServerless = process.env.LAMBDA_TASK_ROOT ||
                      process.env.AWS_LAMBDA_FUNCTION_NAME || 
                      process.env.VERCEL || 
                      process.env.VERCEL_ENV ||
-                     __dirname.startsWith('/var/task') ||
-                     __dirname.startsWith('/var/runtime');
+                     String(__dirname || '').includes('/var/task') ||
+                     String(__dirname || '').includes('/var/runtime') ||
+                     String(process.cwd() || '').includes('/var/task') ||
+                     String(process.cwd() || '').includes('/var/runtime');
+
+console.log('Environment check:', {
+  LAMBDA_TASK_ROOT: process.env.LAMBDA_TASK_ROOT,
+  AWS_LAMBDA_FUNCTION_NAME: process.env.AWS_LAMBDA_FUNCTION_NAME,
+  VERCEL: process.env.VERCEL,
+  VERCEL_ENV: process.env.VERCEL_ENV,
+  __dirname: __dirname,
+  cwd: process.cwd(),
+  isServerless: isServerless
+});
 
 if (isServerless) {
   // Serverless environment (Lambda, Vercel, etc.) - use /tmp directory (writable)
@@ -21,6 +33,7 @@ if (isServerless) {
   if (!fs.existsSync('/tmp')) {
     try {
       fs.mkdirSync('/tmp', { recursive: true });
+      console.log('Created /tmp directory');
     } catch (e) {
       console.error('Could not create /tmp directory:', e.message);
     }
@@ -53,6 +66,20 @@ if (!fs.existsSync(dbDir)) {
   }
 }
 
+// Final safety check: if dbPath contains /var/task, force to /tmp
+if (String(dbPath).includes('/var/task') || String(dbPath).includes('/var/runtime')) {
+  console.log('WARNING: dbPath contains /var/task or /var/runtime, forcing to /tmp/data.sqlite');
+  dbPath = '/tmp/data.sqlite';
+  // Ensure /tmp exists
+  if (!fs.existsSync('/tmp')) {
+    try {
+      fs.mkdirSync('/tmp', { recursive: true });
+    } catch (e) {
+      console.error('Could not create /tmp:', e.message);
+    }
+  }
+}
+
 let db;
 try {
   // Try to open database with WAL mode for better concurrency
@@ -66,9 +93,28 @@ try {
   console.error('Failed to open database at:', dbPath);
   console.error('Error code:', error.code);
   console.error('Error message:', error.message);
+  console.error('__dirname:', __dirname);
+  console.error('process.cwd():', process.cwd());
   
-  // If we're in serverless and /tmp failed, try creating a new database
-  if (isServerless && dbPath === '/tmp/data.sqlite') {
+  // If path contains /var/task, force to /tmp
+  if (String(dbPath).includes('/var/task') || String(dbPath).includes('/var/runtime')) {
+    console.log('Path contains /var/task, forcing to /tmp/data.sqlite');
+    dbPath = '/tmp/data.sqlite';
+    try {
+      // Ensure /tmp exists
+      if (!fs.existsSync('/tmp')) {
+        fs.mkdirSync('/tmp', { recursive: true });
+      }
+      // Try to create new database at /tmp
+      db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      console.log('New database created successfully at:', dbPath);
+    } catch (e2) {
+      console.error('Failed to create database at /tmp:', e2.message);
+      throw error; // Throw original error
+    }
+  } else if (isServerless && dbPath === '/tmp/data.sqlite') {
+    // If we're in serverless and /tmp failed, try creating a new database
     console.log('Attempting to create new database at /tmp/data.sqlite');
     try {
       // Remove old file if it exists and is corrupted
