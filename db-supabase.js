@@ -279,16 +279,44 @@ async function seedData() {
       });
     }
 
+    // Seed products
+    const { data: products } = await db.supabase.from('products').select('id').limit(1);
+    if (!products || products.length === 0) {
+      await db.supabase.from('products').insert([
+        // Valorant Products
+        { name: 'Valorant 475 VP', slug: 'valorant-475-vp', description: '475 Valorant VP', price: 12000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'low', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 1000 VP', slug: 'valorant-1000-vp', description: '1000 Valorant VP', price: 25000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 2050 VP', slug: 'valorant-2050-vp', description: '2050 Valorant VP', price: 50000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 3650 VP', slug: 'valorant-3650-vp', description: '3650 Valorant VP', price: 85000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 5350 VP', slug: 'valorant-5350-vp', description: '5350 Valorant VP', price: 123000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 11000 VP', slug: 'valorant-11000-vp', description: '11000 Valorant VP', price: 245000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
+        
+        // League of Legends Products
+        { name: 'League of Legends RP 650', slug: 'lol-rp-650', description: '650 League of Legends RP', price: 15000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'low', discount: 0, image_url: 'rp.png' },
+        { name: 'League of Legends RP 1380', slug: 'lol-rp-1380', description: '1380 League of Legends RP', price: 30000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
+        { name: 'League of Legends RP 2800', slug: 'lol-rp-2800', description: '2800 League of Legends RP', price: 60000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
+        { name: 'League of Legends RP 5000', slug: 'lol-rp-5000', description: '5000 League of Legends RP', price: 100000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'high', discount: 0, image_url: 'rp.png' },
+        
+        // Steam Products
+        { name: 'Steam Cüzdan Kodu 50 TL', slug: 'steam-wallet-50tl', description: '50 TL Steam Cüzdan Kodu', price: 5000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 100 TL', slug: 'steam-wallet-100tl', description: '100 TL Steam Cüzdan Kodu', price: 10000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 200 TL', slug: 'steam-wallet-200tl', description: '200 TL Steam Cüzdan Kodu', price: 20000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'high', discount: 0, image_url: 'st.png' },
+        { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077', description: 'Cyberpunk 2077 PC Oyunu', description_en: 'Cyberpunk 2077 PC Game', price: 59900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 10, image_url: 'https://image.example.com/cyberpunk.jpg' },
+        { name: 'Grand Theft Auto V', slug: 'gta-v', description: 'Grand Theft Auto V PC Oyunu', description_en: 'Grand Theft Auto V PC Game', price: 29900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 5, image_url: 'https://image.example.com/gtav.jpg' },
+        { name: 'Elden Ring', slug: 'elden-ring', description: 'Elden Ring PC Oyunu', description_en: 'Elden Ring PC Game', price: 69900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'https://image.example.com/eldenring.jpg' },
+        { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', description_en: 'Red Dead Redemption 2 PC Game', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'https://image.example.com/rdr2.jpg' }
+      ]);
+      console.log('✅ Products seeded');
+    }
+    
     // Seed featured products
     const { data: featured } = await db.supabase.from('featured_products').select('id').limit(1);
     if (!featured || featured.length === 0) {
       await db.supabase.from('featured_products').insert([
-        { name: 'Cyberpunk 2077', platform: 'Steam', price: 239, discount: 20, badge: 'discount', icon: 'fas fa-gamepad', display_order: 1 },
-        { name: 'Valorant 3650 VP', platform: 'Valorant', price: 800, discount: 0, badge: 'hot', icon: 'fas fa-crosshairs', display_order: 2 },
-        { name: 'Elden Ring', platform: 'Steam', price: 399, discount: 0, badge: null, icon: 'fas fa-dragon', display_order: 3 },
-        { name: 'Steam Oyun Kodu', platform: 'Steam', price: 75, discount: 0, badge: 'new', icon: 'fab fa-steam', display_order: 4 },
-        { name: 'League of Legends RP', platform: 'LoL', price: 240, discount: 0, badge: 'new', icon: 'fas fa-crown', display_order: 5 },
-        { name: 'Steam Rastgele Oyun Kodu', platform: 'Steam', price: 102, discount: 15, badge: 'discount', icon: 'fas fa-dice', display_order: 6 }
+        { name: 'Cyberpunk 2077', platform: 'Steam', price: 599, discount: 10, badge: 'new', icon: 'fas fa-fire', display_order: 1 },
+        { name: 'Grand Theft Auto V', platform: 'Epic Games', price: 299, discount: 5, badge: 'sale', icon: 'fas fa-tag', display_order: 2 },
+        { name: 'Elden Ring', platform: 'Steam', price: 699, discount: 0, badge: 'hot', icon: 'fas fa-star', display_order: 3 },
+        { name: 'Red Dead Redemption 2', platform: 'Rockstar', price: 499, discount: 0, badge: 'new', icon: 'fas fa-plus', display_order: 4 }
       ]);
     }
 
