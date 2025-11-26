@@ -1349,10 +1349,13 @@ app.get('/api/products', async (req, res) => {
                 query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
             }
             
-            // Category filter (case-insensitive)
+            // Category filter (case-insensitive using or with multiple cases)
             if (category && category !== 'all') {
-                // Use ilike for case-insensitive matching (Supabase ilike is case-insensitive)
-                query = query.ilike('category', category);
+                const categoryLower = category.toLowerCase();
+                const categoryUpper = category.toUpperCase();
+                const categoryCapitalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+                // Try multiple case variations
+                query = query.or(`category.eq.${categoryLower},category.eq.${categoryUpper},category.eq.${categoryCapitalized},category.eq.${category}`);
             }
             
             // Platform filter
