@@ -283,13 +283,13 @@ async function seedData() {
     const { data: products } = await db.supabase.from('products').select('id').limit(1);
     if (!products || products.length === 0) {
       await db.supabase.from('products').insert([
-        // Valorant Products
+        // Valorant Products (fiyatlar kuruş cinsinden: TL * 100)
         { name: 'Valorant 475 VP', slug: 'valorant-475-vp', description: '475 Valorant VP', price: 12000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'low', discount: 0, image_url: 'vp.png' },
-        { name: 'Valorant 1000 VP', slug: 'valorant-1000-vp', description: '1000 Valorant VP', price: 25000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp.png' },
-        { name: 'Valorant 2050 VP', slug: 'valorant-2050-vp', description: '2050 Valorant VP', price: 50000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp.png' },
-        { name: 'Valorant 3650 VP', slug: 'valorant-3650-vp', description: '3650 Valorant VP', price: 85000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
-        { name: 'Valorant 5350 VP', slug: 'valorant-5350-vp', description: '5350 Valorant VP', price: 123000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
-        { name: 'Valorant 11000 VP', slug: 'valorant-11000-vp', description: '11000 Valorant VP', price: 245000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant 1000 VP', slug: 'valorant-1000-vp', description: '1000 Valorant VP', price: 25000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp1.png' },
+        { name: 'Valorant 2050 VP', slug: 'valorant-2050-vp', description: '2050 Valorant VP', price: 50000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'medium', discount: 0, image_url: 'vp1.png' },
+        { name: 'Valorant 3650 VP', slug: 'valorant-3650-vp', description: '3650 Valorant VP', price: 85000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp2.png' },
+        { name: 'Valorant 5350 VP', slug: 'valorant-5350-vp', description: '5350 Valorant VP', price: 123000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp2.png' },
+        { name: 'Valorant 11000 VP', slug: 'valorant-11000-vp', description: '11000 Valorant VP', price: 245000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp2.png' },
         
         // League of Legends Products
         { name: 'League of Legends RP 650', slug: 'lol-rp-650', description: '650 League of Legends RP', price: 15000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'low', discount: 0, image_url: 'rp.png' },
