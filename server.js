@@ -97,25 +97,71 @@ const HAS_IYZIPAY = Boolean(Iyzipay && IYZICO_API_KEY && IYZICO_SECRET);
 const iyzico = HAS_IYZIPAY ? new Iyzipay({ apiKey: IYZICO_API_KEY, secretKey: IYZICO_SECRET, uri: IYZICO_BASE_URL }) : null;
 
 // Fulfill digital product codes for a paid order
-function fulfillDigitalCodes(orderId) {
-    const items = db.prepare('SELECT id, product_id, quantity FROM order_items WHERE order_id = ?').all(orderId);
-    const insertDelivered = db.prepare('INSERT INTO order_item_codes (order_item_id, product_id, code_id, code) VALUES (?, ?, ?, ?)');
-    const markUsed = db.prepare('UPDATE product_codes SET is_used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?');
+async function fulfillDigitalCodes(orderId) {
+    try {
+        let items;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('order_items')
+                .select('id, product_id, quantity')
+                .eq('order_id', orderId);
+            if (error) throw error;
+            items = data || [];
+        } else {
+            items = await db.prepare('SELECT id, product_id, quantity FROM order_items WHERE order_id = ?').all(orderId);
+        }
 
-    for (const item of items) {
-        const needed = Math.max(1, Number(item.quantity || 1));
-        const available = db.prepare('SELECT id, code FROM product_codes WHERE product_id = ? AND is_used = 0 ORDER BY id ASC LIMIT ?').all(item.product_id, needed);
-        if (available.length < needed) {
-            // Not enough codes, mark order as processing and continue
-            db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
-              .run(orderId, 'processing', `Ürün #${item.product_id} için kod stoğu yetersiz (${available.length}/${needed}).`);
-            continue;
+        for (const item of items) {
+            const needed = Math.max(1, Number(item.quantity || 1));
+            
+            let available;
+            if (db.supabase) {
+                const { data, error } = await db.supabase
+                    .from('product_codes')
+                    .select('id, code')
+                    .eq('product_id', item.product_id)
+                    .eq('is_used', false)
+                    .order('id', { ascending: true })
+                    .limit(needed);
+                if (error) throw error;
+                available = data || [];
+            } else {
+                available = await db.prepare('SELECT id, code FROM product_codes WHERE product_id = ? AND is_used = 0 ORDER BY id ASC LIMIT ?').all(item.product_id, needed);
+            }
+            
+            if (available.length < needed) {
+                // Not enough codes, mark order as processing and continue
+                if (db.supabase) {
+                    await db.supabase
+                        .from('order_tracking')
+                        .insert({ order_id: orderId, status: 'processing', message: `Ürün #${item.product_id} için kod stoğu yetersiz (${available.length}/${needed}).` });
+                } else {
+                    await db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
+                      .run(orderId, 'processing', `Ürün #${item.product_id} için kod stoğu yetersiz (${available.length}/${needed}).`);
+                }
+                continue;
+            }
+            
+            for (let i = 0; i < needed; i++) {
+                const codeRow = available[i];
+                if (db.supabase) {
+                    await db.supabase
+                        .from('order_item_codes')
+                        .insert({ order_item_id: item.id, product_id: item.product_id, code_id: codeRow.id, code: codeRow.code });
+                    await db.supabase
+                        .from('product_codes')
+                        .update({ is_used: true, used_at: new Date().toISOString() })
+                        .eq('id', codeRow.id);
+                } else {
+                    await db.prepare('INSERT INTO order_item_codes (order_item_id, product_id, code_id, code) VALUES (?, ?, ?, ?)')
+                        .run(item.id, item.product_id, codeRow.id, codeRow.code);
+                    await db.prepare('UPDATE product_codes SET is_used = 1, used_at = CURRENT_TIMESTAMP WHERE id = ?').run(codeRow.id);
+                }
+            }
         }
-        for (let i = 0; i < needed; i++) {
-            const codeRow = available[i];
-            insertDelivered.run(item.id, item.product_id, codeRow.id, codeRow.code);
-            markUsed.run(codeRow.id);
-        }
+    } catch (error) {
+        console.error('Fulfill digital codes error:', error);
+        throw error;
     }
 }
 
@@ -1561,43 +1607,96 @@ app.post('/api/payments/verify', (req, res) => {
                 return res.status(500).json({ ok: false });
             }
             const status = result?.paymentStatus === 'SUCCESS' ? 'succeeded' : 'failed';
-            const paymentRow = db.prepare('SELECT * FROM payments WHERE external_id = ? OR id = ?').get(token, Number(conversationId || 0));
-            if (!paymentRow) return res.status(404).json({ ok: false });
-            db.prepare('UPDATE payments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, paymentRow.id);
-            if (status === 'succeeded') {
-                db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('paid', paymentRow.order_id);
-                db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
-                  .run(paymentRow.order_id, 'processing', 'İyzico ödemesi onaylandı');
-
-                // Send email if SMTP configured
+            (async () => {
                 try {
-                    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
-                    if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
-                        const user = db.prepare('SELECT email, name FROM users WHERE id = ?').get(paymentRow.user_id);
-                        const transporter = nodemailer.createTransport({
-                            host: SMTP_HOST,
-                            port: Number(SMTP_PORT),
-                            secure: Number(SMTP_PORT) === 465,
-                            auth: { user: SMTP_USER, pass: SMTP_PASS },
-                            tls: { rejectUnauthorized: false }
-                        });
-                        // Deliver digital codes if available
-                        try {
-                            fulfillDigitalCodes(paymentRow.order_id);
-                        } catch (fe) {
-                            console.warn('Code fulfillment failed:', fe.message);
+                    let paymentRow;
+                    if (db.supabase) {
+                        const { data, error } = await db.supabase
+                            .from('payments')
+                            .select('*')
+                            .or(`external_id.eq.${token},id.eq.${Number(conversationId || 0)}`)
+                            .limit(1)
+                            .single();
+                        if (error || !data) return res.status(404).json({ ok: false });
+                        paymentRow = data;
+                    } else {
+                        paymentRow = await db.prepare('SELECT * FROM payments WHERE external_id = ? OR id = ?').get(token, Number(conversationId || 0));
+                        if (!paymentRow) return res.status(404).json({ ok: false });
+                    }
+                    
+                    if (db.supabase) {
+                        await db.supabase
+                            .from('payments')
+                            .update({ status, updated_at: new Date().toISOString() })
+                            .eq('id', paymentRow.id);
+                    } else {
+                        await db.prepare('UPDATE payments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, paymentRow.id);
+                    }
+                    
+                    if (status === 'succeeded') {
+                        if (db.supabase) {
+                            await db.supabase
+                                .from('orders')
+                                .update({ status: 'paid' })
+                                .eq('id', paymentRow.order_id);
+                            await db.supabase
+                                .from('order_tracking')
+                                .insert({ order_id: paymentRow.order_id, status: 'processing', message: 'İyzico ödemesi onaylandı' });
+                        } else {
+                            await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run('paid', paymentRow.order_id);
+                            await db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
+                              .run(paymentRow.order_id, 'processing', 'İyzico ödemesi onaylandı');
                         }
 
-                        const mailOptions = {
-                            from: SMTP_FROM || SMTP_USER,
-                            to: user?.email,
-                            subject: 'Ödeme Onayı - Keyco',
-                            text: `Merhaba ${user?.name || ''},\n\nÖdemeniz başarıyla alındı. Sipariş #${paymentRow.order_id} işleme alındı. Kodlarınız (varsa) hesabınıza tanımlandı ve bu e-postaya eklendi.\n\nTeşekkürler.\nKeyco`
-                        };
-                        transporter.sendMail(mailOptions).catch(() => {});
+                        // Send email if SMTP configured
+                        try {
+                            const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+                            if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
+                                let user;
+                                if (db.supabase) {
+                                    const { data, error } = await db.supabase
+                                        .from('users')
+                                        .select('email, name')
+                                        .eq('id', paymentRow.user_id)
+                                        .single();
+                                    if (!error && data) user = data;
+                                } else {
+                                    user = await db.prepare('SELECT email, name FROM users WHERE id = ?').get(paymentRow.user_id);
+                                }
+                                
+                                const transporter = nodemailer.createTransport({
+                                    host: SMTP_HOST,
+                                    port: Number(SMTP_PORT),
+                                    secure: Number(SMTP_PORT) === 465,
+                                    auth: { user: SMTP_USER, pass: SMTP_PASS },
+                                    tls: { rejectUnauthorized: false }
+                                });
+                                
+                                // Deliver digital codes if available
+                                try {
+                                    await fulfillDigitalCodes(paymentRow.order_id);
+                                } catch (fe) {
+                                    console.warn('Code fulfillment failed:', fe.message);
+                                }
+
+                                const mailOptions = {
+                                    from: SMTP_FROM || SMTP_USER,
+                                    to: user?.email,
+                                    subject: 'Ödeme Onayı - Keyco',
+                                    text: `Merhaba ${user?.name || ''},\n\nÖdemeniz başarıyla alındı. Sipariş #${paymentRow.order_id} işleme alındı. Kodlarınız (varsa) hesabınıza tanımlandı ve bu e-postaya eklendi.\n\nTeşekkürler.\nKeyco`
+                                };
+                                transporter.sendMail(mailOptions).catch(() => {});
+                            }
+                        } catch (_) {}
                     }
-                } catch (_) {}
-            }
+                    
+                    // Iyzi expects 200 OK
+                    res.json({ ok: true });
+                } catch (e) {
+                    console.error('Payment verify error:', e);
+                    res.status(500).json({ ok: false });
+                }
+            })();
             // Iyzi expects 200 OK
             res.json({ ok: true });
         });
