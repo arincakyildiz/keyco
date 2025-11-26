@@ -6434,31 +6434,75 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       console.log('🎮 Steam rastgele oyun özel görünümü yükleniyor...');
       console.log('📦 Mevcut ürünler:', items.length);
       
-      // Rastgele Steam paketlerini direkt ID ile bul (40, 41, 42)
-      const steamPackets = items.filter(p => [40, 41, 42].includes(p.id));
-      console.log('🎯 Steam paketleri (ID 40,41,42):', steamPackets.length, 'adet');
+      // Önce "random" package_level'ı veya slug'ında "random"/"rastgele" geçen özel paketleri bul
+      // Sadece "Düşük Paket", "Orta Paket", "Yüksek Paket" içeren ürünleri göster
+      const randomPackets = items.filter(p => {
+        const slug = (p.slug || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        const packageLevel = (p.package_level || '').toLowerCase();
+        const isSteam = (p.category || '').toLowerCase() === 'steam' || (p.platform || '').toLowerCase() === 'steam';
+        
+        // Sadece "Düşük Paket", "Orta Paket", "Yüksek Paket" içeren ürünleri göster
+        const hasPackageLevel = name.includes('düşük paket') || name.includes('orta paket') || name.includes('yüksek paket') ||
+                                slug.includes('dusuk') || slug.includes('orta') || slug.includes('yuksek');
+        
+        return isSteam && hasPackageLevel && (
+          packageLevel === 'random' || 
+          slug.includes('random') || slug.includes('rastgele') ||
+          name.includes('rastgele') || name.includes('random')
+        );
+      });
       
-      if (steamPackets.length > 0) {
-        // Seviyeye göre sırala: low, medium, high
-        steamPackets.sort((a, b) => {
-          const order = { low: 1, medium: 2, high: 3 };
-          return (order[a.package_level] || 99) - (order[b.package_level] || 99);
-        });
-        
-        // Grid'i temizle ve sadece Steam paketlerini göster
+      console.log('🎲 Rastgele Steam paketleri (özel):', randomPackets.length, 'adet');
+      
+      if (randomPackets.length >= 3) {
+        // Fiyata göre sırala (düşük, orta, yüksek)
+        randomPackets.sort((a, b) => (a.price || 0) - (b.price || 0));
+        const selectedPackets = randomPackets.slice(0, 3);
         grid.innerHTML = '';
-        
-        // Normal grid düzenini kullan (products-grid CSS'i ile)
-        steamPackets.forEach((p) => {
-          console.log('🎮 Steam Paketi kartı oluşturuluyor:', p.name, 'Fiyat:', (p.price/100) + '₺');
+        selectedPackets.forEach((p) => {
+          console.log('🎮 Rastgele Steam Paketi:', p.name, 'Fiyat:', (p.price/100) + '₺');
           const card = createProductCard(p);
           grid.appendChild(card);
         });
+        console.log('✅ Rastgele Steam kartları eklendi (özel paketler)');
+        return;
+      }
+      
+      // Fallback: package_level'a göre bul (low, medium, high)
+      const fallbackPackets = items.filter(p => 
+        (p.category||'').toLowerCase() === 'steam' && 
+        ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
+      );
+      console.log('🔄 Tüm Steam paketleri:', fallbackPackets.length, 'adet');
+      
+      if (fallbackPackets.length > 0) {
+        // Her seviyeden bir tane seç (low, medium, high)
+        const selectedPackets = [];
+        const levels = ['low', 'medium', 'high'];
         
-        console.log('✅ Rastgele Steam kartları eklendi');
-        return; // Fonksiyonu bitir, sadece 3 paket gösterilsin
-      } else {
-        console.log('❌ Steam paketleri bulunamadı (ID: 40, 41, 42)');
+        levels.forEach(level => {
+          const levelPackets = fallbackPackets.filter(p => (p.package_level||'').toLowerCase() === level);
+          if (levelPackets.length > 0) {
+            // Fiyata göre sırala ve en ucuz olanı seç
+            levelPackets.sort((a, b) => (a.price||0) - (b.price||0));
+            selectedPackets.push(levelPackets[0]);
+          }
+        });
+        
+        if (selectedPackets.length > 0) {
+          grid.innerHTML = '';
+          selectedPackets.forEach((p) => {
+            console.log('🎮 Steam Paketi (fallback):', p.name, 'Fiyat:', (p.price/100) + '₺');
+            const card = createProductCard(p);
+            grid.appendChild(card);
+          });
+          console.log('✅ Rastgele Steam kartları eklendi (fallback)');
+          return;
+        }
+      }
+      
+      console.log('❌ Steam paketleri bulunamadı');
         // Fallback olarak package_level ile ara
         const fallbackPackets = items.filter(p => 
           (p.category||'').toLowerCase() === 'steam' && 
