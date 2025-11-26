@@ -1349,18 +1349,17 @@ app.get('/api/products', async (req, res) => {
                 query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
             }
             
-            // Category filter (case-insensitive using or with multiple cases)
+            // Category filter - check both category and platform fields (case-insensitive)
             if (category && category !== 'all') {
                 const categoryLower = category.toLowerCase();
-                const categoryUpper = category.toUpperCase();
-                const categoryCapitalized = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
-                // Try multiple case variations
-                query = query.or(`category.eq.${categoryLower},category.eq.${categoryUpper},category.eq.${categoryCapitalized},category.eq.${category}`);
+                // Check both category and platform fields since they might be used interchangeably
+                query = query.or(`category.ilike.${categoryLower},platform.ilike.${categoryLower}`);
             }
             
             // Platform filter
             if (platform && platform !== 'all') {
-                query = query.eq('platform', platform);
+                const platformLower = platform.toLowerCase();
+                query = query.or(`platform.ilike.${platformLower},category.ilike.${platformLower}`);
             }
             
             // Package level filter
