@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyco - Oyun Kodları ve Dijital Ürünler</title>
+    <meta name="theme-color" content="#6366f1">
+    <meta name="description" content="Keyco: En güvenilir oyun kodları, hediye kartları ve dijital ürünler. Anında teslimat, güvenli ödeme, 7/24 destek.">
+    <meta property="og:title" content="Keyco - Oyun Kodları ve Dijital Ürünler">
+    <meta property="og:description" content="En güvenilir oyun kodu mağazası. Anında teslimat ve 7/24 destek.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="/">
+    <meta property="og:image" content="logo.png">
+    <!-- .env ile SMTP yapılandırması gereklidir; örnek için README oluşturulacaktır. -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css?v=14">
+    <link rel="stylesheet" href="favorites.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="prefetch" href="admin.html">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="loading-logo">
+                <img src="logo.png" alt="KEYCO">
+            </div>
+            <div class="loading-text">KEYCO</div>
+
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scroll Progress Bar -->
+    <div id="scrollProgress" class="scroll-progress" aria-hidden="true"></div>
+
+    <!-- Floating Background Particles -->
+    <div class="floating-particles">
+        <div class="floating-particle"></div>
+        <div class="floating-particle"></div>
+        <div class="floating-particle"></div>
+        <div class="floating-particle"></div>
+        <div class="floating-particle"></div>
+    </div>
+
+    <!-- Offline Banner -->
+    <div id="offlineBanner" class="offline-banner" style="display: none;">
+        <div class="container">
+            <i class="fas fa-wifi-slash"></i>
+            <span>İnternet bağlantınız kesildi. Bazı özellikler çalışmayabilir.</span>
+            <button onclick="checkConnection()" class="retry-btn">
+                <i class="fas fa-redo"></i> Tekrar Dene
+            </button>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <nav class="navbar">
+            <div class="nav-container">
+                <!-- Logo - Mobil için optimize edildi -->
+                <div class="logo">
+                    <img src="logo.png" alt="Keyco Logo" class="logo-image" loading="lazy">
+                    <div class="logo-text">
+                        <h1>KEYCO</h1>
+                        <span class="logo-subtitle">Gaming Store</span>
+                    </div>
+                </div>
+                
+                <!-- Navigation Menu - Desktop'ta görünür -->
+                <ul class="nav-menu">
+                    <li><a href="#home" data-i18n="nav.home">Ana Sayfa</a></li>
+                    <li><a href="#products" data-i18n="nav.products">Ürünler</a></li>
+                    <li class="has-submenu">
+                        <a href="#categories"><span data-i18n="nav.categories">Kategoriler</span> <i class="fas fa-chevron-down"></i></a>
+                        <ul class="submenu">
+                            <li class="has-submenu">
+                                <a href="#"><span data-i18n="nav.categories.valorant">Valorant</span> <i class="fas fa-chevron-right"></i></a>
+                                <ul class="submenu submenu-right">
+                                    <li><a href="#" data-subcat="valorant-vp" data-i18n="nav.categories.valorant.vp">Valorant VP</a></li>
+                                    <li><a href="#" data-subcat="valorant-random-vp" data-i18n="nav.categories.valorant.random-vp">Valorant Rastgele VP</a></li>
+                                </ul>
+                            </li>
+                            <li class="has-submenu">
+                                <a href="#"><span data-i18n="nav.categories.lol">League of Legends</span> <i class="fas fa-chevron-right"></i></a>
+                                <ul class="submenu submenu-right">
+                                    <li><a href="#" data-subcat="lol-rp" data-i18n="nav.categories.lol.rp">LOL RP</a></li>
+                                    <li><a href="#" data-subcat="lol-random-rp" data-i18n="nav.categories.lol.random-rp">LOL Rastgele RP</a></li>
+                                </ul>
+                            </li>
+                            <li class="has-submenu">
+                                <a href="#"><span data-i18n="nav.categories.steam">Steam</span> <i class="fas fa-chevron-right"></i></a>
+                                <ul class="submenu submenu-right">
+                                    <li><a href="#" data-subcat="steam-wallet" data-i18n="nav.categories.steam.wallet">Steam Cüzdan Kodu</a></li>
+                                    <li><a href="#" data-subcat="steam-game-code" data-i18n="nav.categories.steam.game-code">Steam Oyun Kodu</a></li>
+                                    <li><a href="#" data-subcat="steam-random-game-code" data-i18n="nav.categories.steam.random-game-code">Steam Rastgele Oyun Kodu</a></li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <li><a href="#contact" data-i18n="nav.contact">İletişim</a></li>
+                </ul>
+                
+                <!-- Right Actions - Mobil için optimize edildi -->
+                <div class="nav-actions">
+                    <!-- Search Box - Mobilde gizli -->
+                    <div class="search-box">
+                        <input type="text" id="searchInput" placeholder="Oyun ara..." class="search-input">
+                        <button class="search-btn" onclick="performSearch()">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+
+                    <!-- Auth Buttons - Mobilde sadece login görünür -->
+                    <div class="auth-buttons">
+                        <button class="login-btn" onclick="openLoginModal()">
+                            <i class="fas fa-sign-in-alt"></i>
+                            <span class="btn-text" data-i18n="auth.login">Giriş Yap</span>
+                        </button>
+                        <button class="register-btn" onclick="openRegisterModal()">
+                            <i class="fas fa-user-plus"></i>
+                            <span class="btn-text" data-i18n="auth.register">Kayıt Ol</span>
+                        </button>
+                    </div>
+                    
+                                         <!-- Language Selector - Desktop'ta dropdown, mobilde direkt -->
+                     <div class="language-selector" id="languageSelector">
+                         <button class="language-btn" id="languageBtn" onclick="toggleHeaderLanguage()">
+                             <i class="fas fa-globe"></i>
+                             <span id="currentLang">TR</span>
+                             <i class="fas fa-chevron-down"></i>
+                         </button>
+                         <div class="language-dropdown" id="languageDropdown">
+                             <div class="language-option active" data-lang="tr" onclick="changeLanguage('tr')">
+                                 <img src="https://flagcdn.com/w20/tr.png" alt="Türkçe" loading="lazy">
+                                 <span>Türkçe</span>
+                             </div>
+                             <div class="language-option" data-lang="en" onclick="changeLanguage('en')">
+                                 <img src="https://flagcdn.com/w20/us.png" alt="English" loading="lazy">
+                                 <span>English</span>
+                             </div>
+                         </div>
+                     </div>
+                    
+                    <!-- Cart Icon -->
+                    <div class="cart-icon">
+                        <i class="fas fa-shopping-cart"></i>
+                        <span class="cart-count">0</span>
+                    </div>
+                    
+                    <!-- Notifications Icon -->
+                    <div class="notifications-icon" onclick="toggleNotifications()">
+                        <i class="fas fa-bell"></i>
+                        <span class="notifications-count" id="notificationsCount">0</span>
+                    </div>
+                    
+                    
+                    <!-- Mobile Menu Button - Mobilde görünür -->
+                    <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mobile Menu Panel -->
+            <div class="mobile-menu-panel" id="mobileMenuPanel">
+                <div class="mobile-menu-header">
+                    <div class="mobile-logo">
+                        <img src="logo.png" alt="Keyco Logo" class="mobile-logo-image" loading="lazy">
+                        <span>KEYCO</span>
+                    </div>
+                    <button class="mobile-menu-close" id="mobileMenuClose" onclick="closeMobileMenu()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="mobile-menu-content">
+                    <ul class="mobile-nav-menu">
+                        <li><a href="#home" data-i18n="nav.home" onclick="closeMobileMenu()">Ana Sayfa</a></li>
+                        <li><a href="#products" data-i18n="nav.products" onclick="closeMobileMenu()">Ürünler</a></li>
+                        <li><a href="#" onclick="closeMobileMenu(); openModal('ordersModal'); loadMyOrders();"><i class="fas fa-receipt"></i> Siparişlerim</a></li>
+                        <li class="mobile-has-submenu">
+                            <button class="mobile-submenu-toggle">
+                                <span data-i18n="nav.categories">Kategoriler</span>
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                            <ul class="mobile-submenu">
+                                <li class="mobile-has-submenu">
+                                    <button class="mobile-submenu-toggle">
+                                        <span data-i18n="nav.categories.valorant">Valorant</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                    <ul class="mobile-submenu">
+                                        <li><a href="#" onclick="closeMobileMenu()" data-i18n="nav.categories.valorant.vp">Valorant VP</a></li>
+                                        <li><a href="#" onclick="closeMobileMenu()" data-i18n="nav.categories.valorant.random-vp">Valorant Rastgele VP</a></li>
+                                    </ul>
+                                </li>
+                                <li class="mobile-has-submenu">
+                                    <button class="mobile-submenu-toggle">
+                                        <span data-i18n="nav.categories.lol">League of Legends</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                    <ul class="mobile-submenu">
+                                        <li><a href="#" onclick="closeMobileMenu()" data-i18n="nav.categories.lol.rp">LOL RP</a></li>
+                                        <li><a href="#" onclick="closeMobileMenu()" data-i18n="nav.categories.lol.random-rp">LOL Rastgele RP</a></li>
+                                    </ul>
+                                </li>
+                                <li class="mobile-has-submenu">
+                                    <button class="mobile-submenu-toggle">
+                                        <span data-i18n="nav.categories.steam">Steam</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                    <ul class="mobile-submenu">
+                                        <li><a href="#" onclick="closeMobileMenu()" data-subcat="steam-wallet" data-i18n="nav.categories.steam.wallet">Steam Cüzdan Kodu</a></li>
+                                        <li><a href="#" onclick="closeMobileMenu()" data-subcat="steam-game-code" data-i18n="nav.categories.steam.game-code">Steam Oyun Kodu</a></li>
+                                        <li><a href="#" onclick="closeMobileMenu()" data-subcat="steam-random-game-code" data-i18n="nav.categories.steam.random-game-code">Steam Rastgele Oyun Kodu</a></li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </li>
+                        <li><a href="#contact" data-i18n="nav.contact" onclick="closeMobileMenu()">İletişim</a></li>
+                    </ul>
+                    
+                    <div class="mobile-search">
+                        <input type="text" placeholder="Oyun ara...">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    
+                    <div class="mobile-auth-buttons">
+                        <button class="mobile-login-btn" onclick="openLoginModal()">
+                            <i class="fas fa-sign-in-alt"></i>
+                            <span data-i18n="auth.login">Giriş Yap</span>
+                        </button>
+                        <button class="mobile-register-btn" onclick="openRegisterModal()">
+                            <i class="fas fa-user-plus"></i>
+                            <span data-i18n="auth.register">Kayıt Ol</span>
+                        </button>
+                    </div>
+                    
+                                         <div class="mobile-language-selector">
+                         <button class="mobile-language-btn" id="mobileLanguageBtn" onclick="toggleMobileLanguageDropdown()">
+                             <i class="fas fa-globe"></i>
+                             <span id="mobileCurrentLang">TR</span>
+                             <i class="fas fa-chevron-down"></i>
+                         </button>
+                         <div class="mobile-language-dropdown" id="mobileLanguageDropdown">
+                             <div class="mobile-language-option active" data-lang="tr" onclick="setLanguage('tr')">
+                                 <img src="https://flagcdn.com/w20/tr.png" alt="Türkçe">
+                                 <span>Türkçe</span>
+                             </div>
+                             <div class="mobile-language-option" data-lang="en" onclick="setLanguage('en')">
+                                 <img src="https://flagcdn.com/w20/us.png" alt="English">
+                                 <span>English</span>
+                             </div>
+                         </div>
+                     </div>
+                    
+                    <div class="mobile-theme-toggle">
+                        <button class="mobile-theme-btn" id="mobileThemeBtn">
+                            <i class="fas fa-moon"></i>
+                            <span data-i18n="theme.toggle">Tema</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- Mobile Menu Overlay -->
+    <div class="mobile-menu-overlay" id="mobileMenuOverlay"></div>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <div>
+                <h1 data-i18n="hero.title" class="text-slide-in">En İyi Oyun Kodları ve Dijital Ürünler</h1>
+                <p data-i18n="hero.subtitle" class="fade-in-up" style="animation-delay: 0.5s;">Steam ve daha fazla platform için binlerce oyun kodu</p>
+                <div class="hero-buttons fade-in-up" style="animation-delay: 0.8s;">
+                    <button class="btn-primary ripple-effect magnetic liquid-hover" data-i18n="hero.explore">Ürünleri Keşfet</button>
+                    <button class="btn-secondary ripple-effect magnetic liquid-hover" data-i18n="hero.categories">Kategoriler</button>
+                </div>
+            </div>
+        </div>
+        <div class="hero-image">
+            <div class="gaming-icons-carousel">
+                <div class="gaming-icons-slide">
+                    <div>
+                        <i class="fab fa-steam"></i>
+                        <i class="fab fa-playstation"></i>
+                        <i class="fab fa-xbox"></i>
+                        <i class="fas fa-gamepad"></i>
+                    </div>
+                    <div>
+                        <i class="fas fa-trophy"></i>
+                        <i class="fas fa-crown"></i>
+                        <i class="fas fa-star"></i>
+                        <i class="fas fa-gem"></i>
+                    </div>
+                    <div>
+                        <i class="fab fa-discord"></i>
+                        <i class="fab fa-twitch"></i>
+                        <i class="fas fa-headset"></i>
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                    <div>
+                        <i class="fas fa-coins"></i>
+                        <i class="fas fa-gift"></i>
+                        <i class="fas fa-shopping-cart"></i>
+                        <i class="fas fa-credit-card"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    
+
+    <!-- Featured Categories -->
+    <!-- Favorites Page (separate view) -->
+    <section id="favoritesPage" style="display:none; padding: 40px 0;">
+        <div class="container">
+            <h2 style="margin-bottom:16px;"><i class="fas fa-heart"></i> Favorilerim</h2>
+            <div class="products-grid favorites-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap:16px;"></div>
+        </div>
+    </section>
+
+    <!-- Featured Categories -->
+    <section class="categories">
+        <div class="container">
+            <h2 data-i18n="categories.title" class="fade-in-up">Popüler Kategoriler</h2>
+            <div class="category-grid">
+                <div class="category-card fade-in-up tilt-card liquid-hover" style="animation-delay: 0.1s">
+                    <div class="category-icon">
+                        <i class="fab fa-steam"></i>
+                    </div>
+                    <h3 data-i18n="categories.steam">Steam Oyunları</h3>
+                    <p data-i18n="categories.steam.desc">500+ Steam oyunu</p>
+                </div>
+                
+                <div class="category-card fade-in-up tilt-card liquid-hover" style="animation-delay: 0.2s">
+                    <div class="category-icon">
+                        <i class="fas fa-crosshairs"></i>
+                    </div>
+                    <h3 data-i18n="categories.valorant">Valorant</h3>
+                    <p data-i18n="categories.valorant.desc">VP ve rastgele paketler</p>
+                </div>
+                
+                <div class="category-card fade-in-up tilt-card liquid-hover" style="animation-delay: 0.3s">
+                    <div class="category-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 data-i18n="categories.lol">League of Legends</h3>
+                    <p data-i18n="categories.lol.desc">RP ve rastgele paketler</p>
+                </div>
+                
+                <div class="category-card fade-in-up tilt-card liquid-hover" style="animation-delay: 0.4s">
+                    <div class="category-icon">
+                        <i class="fas fa-gift"></i>
+                    </div>
+                    <h3 data-i18n="categories.giftcards">Hediye Kartları</h3>
+                    <p data-i18n="categories.giftcards.desc">Steam, Valorant ve LoL hediye kartları</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Featured Products -->
+    <section id="products" class="featured-products">
+        <div class="container">
+            <h2 data-i18n="products.title" class="fade-in-up">Öne Çıkan Ürünler</h2>
+            <div class="products-grid">
+                <!-- Öne çıkan ürünler JavaScript ile dinamik olarak yüklenecek -->
+            </div>
+            
+
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 data-i18n="features.title" class="fade-in-up">Neden Keyco?</h2>
+            <div class="features-grid">
+                <div class="feature-card fade-in-left" style="animation-delay: 0.1s">
+                    <div class="feature-icon">
+                        <i class="fas fa-bolt"></i>
+                    </div>
+                    <h3 data-i18n="features.instant.title">Anında Teslimat</h3>
+                    <p data-i18n="features.instant.desc">Kodlarınız satın alma sonrası anında mail adresinize gönderilir</p>
+                </div>
+                
+                <div class="feature-card fade-in-right" style="animation-delay: 0.2s">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3 data-i18n="features.secure.title">Güvenli Ödeme</h3>
+                    <p data-i18n="features.secure.desc">SSL şifreleme ile korunan güvenli ödeme sistemi</p>
+                </div>
+                
+                <div class="feature-card fade-in-left" style="animation-delay: 0.3s">
+                    <div class="feature-icon">
+                        <i class="fas fa-headset"></i>
+                    </div>
+                    <h3 data-i18n="features.support.title">7/24 Destek</h3>
+                    <p data-i18n="features.support.desc">Uzman ekibimiz her zaman yardımınıza hazır</p>
+                </div>
+                
+                <div class="feature-card fade-in-right" style="animation-delay: 0.4s">
+                    <div class="feature-icon">
+                        <i class="fas fa-medal"></i>
+                    </div>
+                    <h3 data-i18n="features.original.title">Orijinal Kodlar</h3>
+                    <p data-i18n="features.original.desc">%100 orijinal ve geçerli oyun kodları garantisi</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section (moved under Features) -->
+    <section id="faq" class="faq">
+        <div class="container">
+            <h2 class="fade-in-up" data-i18n="faq.title">Sıkça Sorulan Sorular</h2>
+            <div class="faq-list">
+                <div class="faq-item fade-in-up" style="animation-delay:.05s">
+                    <button class="faq-toggle">
+                        <span data-i18n="faq.q1.title">Kodlar ne kadar sürede teslim edilir?</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="faq-content">
+                        <p data-i18n="faq.q1.content">Satın alma işlemi tamamlandıktan sonra kodlarınız genellikle anında, birkaç dakika içinde e‑posta adresinize gönderilir.</p>
+                    </div>
+                </div>
+                <div class="faq-item fade-in-up" style="animation-delay:.1s">
+                    <button class="faq-toggle">
+                        <span data-i18n="faq.q2.title">Ödemeler güvenli mi?</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="faq-content">
+                        <p data-i18n="faq.q2.content">Tüm ödemeler SSL ile şifrelenir ve güvenli ödeme sağlayıcıları üzerinden işlenir.</p>
+                    </div>
+                </div>
+                <div class="faq-item fade-in-up" style="animation-delay:.15s">
+                    <button class="faq-toggle">
+                        <span data-i18n="faq.q3.title">Kod çalışmazsa ne yapmalıyım?</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="faq-content">
+                        <p data-i18n="faq.q3.content">Önce platform bölgesini ve kullanım adımlarını kontrol edin. Sorun devam ederse sipariş numaranızla destek ekibimize ulaşın; inceleyip çözüm üretelim ya da iade sağlayalım.</p>
+                    </div>
+                </div>
+                <div class="faq-item fade-in-up" style="animation-delay:.2s">
+                    <button class="faq-toggle">
+                        <span data-i18n="faq.q4.title">Hesap satışlarında garanti var mı?</span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="faq-content">
+                        <p data-i18n="faq.q4.content">Hesap tesliminden sonra belirli bir süre giriş/erişim garantisi sunarız. Detaylar ürün sayfasında belirtilir.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Refund / Terms Sections (moved below FAQ) -->
+    <section id="refund" class="info-section">
+        <div class="container">
+            <h2 data-i18n="refund.title">Geri İade Politikası</h2>
+            <p data-i18n="refund.content">Dijital kodlarda iade, kodun kullanılmamış olması şartıyla mümkündür. İnceleme sonrası uygun bulunursa ücret iadesi yapılır.</p>
+        </div>
+    </section>
+
+    <section id="terms" class="info-section">
+        <div class="container">
+            <h2 data-i18n="terms.title">Kullanım Şartları</h2>
+            <p data-i18n="terms.content">Hizmetlerimizi kullanarak platform kurallarımızı ve ilgili politikaları kabul etmiş sayılırsınız. Lütfen satın almadan önce ürün açıklamalarını okuyun.</p>
+        </div>
+    </section>
+
+    <!-- Contact Section (moved to bottom) -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 class="fade-in-up" data-i18n="contact.title">İletişime Geçin</h2>
+            <p class="contact-subtitle fade-in-up" style="animation-delay: .1s" data-i18n="contact.subtitle">Sorularınız ve talepleriniz için bize yazın. En kısa sürede dönüş yapacağız.</p>
+            <div class="contact-grid">
+                <div class="contact-card fade-in-left" style="animation-delay: .2s">
+                    <form id="contactForm" class="contact-form">
+                        <div class="form-group">
+                            <label for="contactName" data-i18n="contact.form.name">Ad Soyad</label>
+                            <input type="text" id="contactName" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="contactEmail" data-i18n="contact.form.email">E-posta</label>
+                            <input type="email" id="contactEmail" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="contactSubject" data-i18n="contact.form.subject">Konu</label>
+                            <input type="text" id="contactSubject" name="subject">
+                        </div>
+                        <div class="form-group">
+                            <label for="contactMessage" data-i18n="contact.form.message">Mesajınız</label>
+                            <textarea id="contactMessage" name="message" rows="5" required></textarea>
+                        </div>
+                        <button type="submit" class="contact-submit-btn" data-i18n="contact.form.send">Gönder</button>
+                    </form>
+                </div>
+                <div class="contact-details fade-in-right" style="animation-delay: .3s">
+                    <div class="detail-item">
+                        <i class="fas fa-envelope"></i>
+                        <div>
+                            <h4 data-i18n="contact.detail.email">E-posta</h4>
+                            <p>keycoglobal@gmail.com</p>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <i class="fas fa-clock"></i>
+                        <div>
+                            <h4 data-i18n="contact.detail.hours">Çalışma Saatleri</h4>
+                            <p data-i18n="footer.support.247">7/24 Destek</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Login Modal -->
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-sign-in-alt"></i> <span data-i18n="auth.login.title">Giriş Yap</span></h2>
+                <button class="close-modal" onclick="closeModal('loginModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form class="auth-form" id="loginForm">
+                <div class="form-group">
+                    <label for="loginEmail" data-i18n="auth.email">E-posta</label>
+                    <input type="email" id="loginEmail" name="email" required>
+                </div>
+                <div class="form-group password-field">
+                    <label for="loginPassword" data-i18n="auth.password">Şifre</label>
+                    <input type="password" id="loginPassword" name="password" required>
+                    <button type="button" class="password-toggle" data-target="loginPassword" aria-label="Şifreyi göster" onclick="togglePassword('loginPassword')"><i class="fas fa-eye"></i></button>
+                </div>
+                <div id="otpSection" style="display:none;">
+                    <div class="form-group">
+                        <label for="loginOtp">Doğrulama Kodu</label>
+                        <div class="otp-input-container">
+                            <input type="text" id="loginOtp" inputmode="numeric" maxlength="6" placeholder="6 haneli kod">
+                            <div class="otp-timer" id="loginOtpTimer" style="display:none;">
+                                <span id="loginTimerText">2:00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-options" style="justify-content: space-between; gap:8px;">
+                        <button type="button" class="auth-submit-btn" id="verifyOtpBtn"><i class="fas fa-shield-alt"></i> Kodu Doğrula</button>
+                        <button type="button" class="auth-submit-btn" id="resendOtpBtn" style="background:transparent;border:1px solid var(--border-color);color:var(--text-primary);"><i class="fas fa-paper-plane"></i> Yeniden Gönder</button>
+                    </div>
+                </div>
+                <div class="form-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="remember" id="loginRememberMe">
+                        <span class="checkmark"></span>
+                        <span data-i18n="auth.remember">Beni hatırla</span>
+                    </label>
+                    <a href="#" class="forgot-password" onclick="showForgotPasswordModal()" data-i18n="auth.forgot">Şifremi unuttum</a>
+                </div>
+                <button type="submit" class="auth-submit-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    <span data-i18n="auth.login">Giriş Yap</span>
+                </button>
+                <div class="auth-switch">
+                    <span data-i18n="auth.no.account">Hesabın yok mu?</span> <a href="#" onclick="switchToRegister()" data-i18n="auth.register">Kayıt Ol</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Register Modal -->
+    <div class="modal-overlay" id="registerModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-user-plus"></i> <span data-i18n="auth.register.title">Kayıt Ol</span></h2>
+                <button class="close-modal" onclick="closeModal('registerModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form class="auth-form" id="registerForm">
+                <div class="form-group">
+                    <label for="registerName" data-i18n="auth.name">Ad Soyad</label>
+                    <input type="text" id="registerName" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="registerEmail" data-i18n="auth.email">E-posta</label>
+                    <input type="email" id="registerEmail" name="email" required>
+                </div>
+                <div class="form-group password-field">
+                    <label for="registerPassword" data-i18n="auth.password">Şifre</label>
+                    <input type="password" id="registerPassword" name="password" required minlength="6">
+                    <button type="button" class="password-toggle" data-target="registerPassword" aria-label="Şifreyi göster" onclick="togglePassword('registerPassword')"><i class="fas fa-eye"></i></button>
+                    <small class="password-hint">Şifre en az 8 karakter, bir büyük harf ve özel karakter içermelidir.</small>
+                </div>
+                <div class="form-group password-field">
+                    <label for="registerConfirmPassword" data-i18n="auth.confirm.password">Şifre Tekrar</label>
+                    <input type="password" id="registerConfirmPassword" name="confirmPassword" required>
+                    <button type="button" class="password-toggle" data-target="registerConfirmPassword" aria-label="Şifreyi göster" onclick="togglePassword('registerConfirmPassword')"><i class="fas fa-eye"></i></button>
+                </div>
+                <div class="form-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="terms" required>
+                        <span class="checkmark"></span>
+                        <span data-i18n="auth.terms.accept">Kullanım şartlarını kabul ediyorum</span>
+                    </label>
+                </div>
+                <button type="submit" class="auth-submit-btn">
+                    <i class="fas fa-user-plus"></i>
+                    <span data-i18n="auth.register">Kayıt Ol</span>
+                </button>
+                <div id="regVerifySection" style="display:none; margin-top:12px;">
+                    <div class="form-group">
+                        <label for="regVerifyCode">E‑posta Doğrulama Kodu</label>
+                        <div class="otp-input-container">
+                            <input type="text" id="regVerifyCode" inputmode="numeric" maxlength="6" placeholder="6 haneli kod">
+                            <div class="otp-timer" id="regOtpTimer" style="display:none;">
+                                <span id="regTimerText">2:00</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-options" style="justify-content: space-between; gap:8px;">
+                        <button type="button" class="auth-submit-btn" id="regVerifyBtn"><i class="fas fa-check"></i> Doğrula</button>
+                        <button type="button" class="auth-submit-btn" id="regResendBtn" style="background:transparent;border:1px solid var(--border-color);color:var(--text-primary);"><i class="fas fa-paper-plane"></i> Yeniden Gönder</button>
+                    </div>
+                </div>
+                <div class="auth-switch">
+                    <span data-i18n="auth.have.account">Zaten hesabın var mı?</span> <a href="#" onclick="switchToLogin()" data-i18n="auth.login">Giriş Yap</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- User Profile Dropdown (shown when logged in) -->
+    <div class="user-profile-dropdown" id="userProfileDropdown">
+        <div class="dropdown-header">
+            <div class="user-avatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="user-info">
+                <span class="user-name" id="userName">Kullanıcı</span>
+                <span class="user-email" id="userEmail">user@example.com</span>
+            </div>
+        </div>
+        <div class="dropdown-menu">
+            <a href="#" class="dropdown-item" id="openProfileSettings">
+                <i class="fas fa-sliders-h"></i>
+                <span data-i18n="profile.settings">Profil Ayarları</span>
+            </a>
+            <a href="#" class="dropdown-item" id="openProfileModalLink">
+                <i class="fas fa-key"></i>
+                <span data-i18n="profile.change_password">Şifre Değiştir</span>
+            </a>
+            <a href="#" class="dropdown-item" id="openOrdersFromProfile">
+                <i class="fas fa-shopping-bag"></i>
+                <span data-i18n="profile.orders">Siparişlerim</span>
+            </a>
+            <a href="#" class="dropdown-item" id="openFavoritesFromProfile">
+                <i class="fas fa-heart"></i>
+                <span data-i18n="profile.favorites">Favorilerim</span>
+            </a>
+            <!-- Wallet removed: direct to checkout when needed -->
+            <div class="dropdown-divider"></div>
+            <a href="#" class="dropdown-item logout-btn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i>
+                <span data-i18n="profile.logout">Çıkış Yap</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Profile Modal (Change Password) -->
+    <div class="modal-overlay" id="profileModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-user-cog"></i> <span>Şifre Değiştir</span></h2>
+                <button class="close-modal" onclick="closeModal('profileModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form class="auth-form" id="profileChangeForm">
+                <div class="form-group">
+                    <label for="profileNewPassword">Yeni Şifre</label>
+                    <div class="password-input-container">
+                        <input type="password" id="profileNewPassword" required minlength="6">
+                        <button type="button" class="password-toggle" onclick="togglePassword('profileNewPassword')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                    <small class="password-hint">En az 6 karakter olmalıdır.</small>
+                </div>
+                <div class="form-group">
+                    <label for="profileNewPassword2">Yeni Şifre (Tekrar)</label>
+                    <div class="password-input-container">
+                        <input type="password" id="profileNewPassword2" required minlength="6">
+                        <button type="button" class="password-toggle" onclick="togglePassword('profileNewPassword2')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="profileChangeCode">E‑posta Kodu</label>
+                    <input type="text" id="profileChangeCode" inputmode="numeric" maxlength="6" placeholder="6 haneli kod">
+                </div>
+                <div class="form-options" style="justify-content: space-between; gap:8px;">
+                    <button type="button" class="auth-submit-btn" id="profileSendCodeBtn"><i class="fas fa-paper-plane"></i> Kodu Gönder</button>
+                    <button type="submit" class="auth-submit-btn"><i class="fas fa-key"></i> Şifreyi Değiştir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Profile Settings Modal -->
+    <div class="modal-overlay" id="profileSettingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-sliders-h"></i> <span data-i18n="profile.settings">Profil Ayarları</span></h2>
+                <button class="close-modal" onclick="closeModal('profileSettingsModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form class="auth-form" id="profileSettingsForm">
+                <div class="form-group">
+                    <label for="settingsName">Ad Soyad</label>
+                    <input type="text" id="settingsName" required>
+                </div>
+                <div class="form-group">
+                    <label for="settingsEmail">E‑posta</label>
+                    <input type="email" id="settingsEmail" required>
+                    <small class="password-hint">E‑posta değişikliğinde doğrulama gerekecektir.</small>
+                </div>
+                <div class="form-group" id="emailChangeVerify" style="display:none;">
+                    <label for="emailChangeCode">Eski E‑posta Kodu</label>
+                    <input type="text" id="emailChangeCode" inputmode="numeric" maxlength="6" placeholder="6 haneli kod">
+                    <div class="form-options" style="justify-content: flex-end; gap:8px; margin-top:8px;">
+                        <button type="button" class="auth-submit-btn" id="emailChangeVerifyBtn"><i class="fas fa-check"></i> Doğrula</button>
+                    </div>
+                </div>
+                <div class="form-options" style="justify-content: flex-end; gap:8px;">
+                    <button type="submit" class="auth-submit-btn"><i class="fas fa-save"></i> Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Forgot Password Modal -->
+    <div class="modal-overlay" id="forgotPasswordModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-key"></i> Şifremi Unuttum</h2>
+                <button class="close-modal" onclick="closeModal('forgotPasswordModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form class="auth-form" id="forgotPasswordForm">
+                <div class="form-group">
+                    <label for="forgotEmail">E-posta Adresiniz</label>
+                    <input type="email" id="forgotEmail" name="forgotEmail" required placeholder="E-posta adresinizi girin">
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="auth-submit-btn">
+                        <i class="fas fa-paper-plane"></i> Şifre Sıfırlama Linki Gönder
+                    </button>
+                </div>
+                <div id="forgotPasswordStatus" class="form-status" style="display: none;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Shopping Cart Sidebar -->
+    <div class="cart-sidebar" id="cartSidebar">
+        <div class="cart-header">
+            <h3 data-i18n="cart.title">Sepetim</h3>
+            <button class="close-cart">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="cart-items" id="cartItems">
+            <p class="empty-cart" data-i18n="cart.empty">Sepetiniz boş</p>
+        </div>
+        <!-- Coupon Section in Cart -->
+        <div class="cart-coupon-section">
+                                <div class="coupon-input-group">
+                        <input type="text" id="cartCouponInput" placeholder="Kupon kodu girin..." class="coupon-input">
+                        <button onclick="validateCartCoupon()" class="coupon-btn">
+                            <i class="fas fa-tag"></i>
+                        </button>
+                        <button onclick="window.shoppingCart.clearCartCoupon()" class="coupon-clear-btn" title="Kuponu Temizle">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+            <div id="cartCouponResult" class="coupon-result" style="display: none;">
+                <!-- Coupon result will be shown here -->
+            </div>
+        </div>
+        
+        <div class="cart-footer">
+            <div class="cart-total">
+                <span data-i18n="cart.total.label">Toplam:</span> ₺<span id="cartTotal">0</span>
+            </div>
+            <div class="cart-discount" id="cartDiscount" style="display: none;">
+                <span data-i18n="cart.discount.label">İndirim:</span> -₺<span id="cartDiscountAmount">0</span>
+            </div>
+            <div class="cart-final-total" id="cartFinalTotal" style="display: none;">
+                <span data-i18n="cart.final.total.label">Son Toplam:</span> ₺<span id="cartFinalTotalAmount">0</span>
+            </div>
+            <button class="checkout-btn" data-i18n="cart.checkout">Satın Al</button>
+        </div>
+    </div>
+
+    <!-- Payment Modal -->
+    <div class="modal-overlay" id="paymentModal" style="display:none;">
+        <div class="modal" style="max-width: 720px; width: 95%;">
+            <div class="modal-header">
+                <h2><i class="fas fa-credit-card"></i> Ödeme</h2>
+                <button class="close-modal" onclick="closeModal('paymentModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="iyzicoCheckoutContainer">
+                    <!-- iyzico checkout form content will be injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- My Orders Modal -->
+    <div class="modal-overlay" id="ordersModal" style="display:none;">
+        <div class="modal" style="max-width: 800px; width: 95%;">
+            <div class="modal-header">
+                <h2><i class="fas fa-receipt"></i> Siparişlerim</h2>
+                <button class="close-modal" onclick="closeModal('ordersModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="ordersList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="footer-logo">
+                        <img src="logo.png" alt="Keyco Logo" class="footer-logo-image" loading="lazy">
+                        <div class="footer-logo-text">
+                            <h3>KEYCO</h3>
+                            <p data-i18n="footer.description">En güvenilir oyun kodu mağazası</p>
+                        </div>
+                    </div>
+                    <div class="social-icons">
+                        <a href="#"><i class="fab fa-facebook"></i></a>
+                         <a href="#"><i class="fab fa-twitter"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                        <a href="#"><i class="fab fa-discord"></i></a>
+                    </div>
+                </div>
+                
+                <div class="footer-section">
+                    <h4 data-i18n="footer.categories">Kategoriler</h4>
+                    <ul>
+                        <li><a href="#" data-i18n="footer.steam" data-footer-category="steam">Steam Oyunları</a></li>
+                        <li><a href="#" data-i18n="footer.valorant" data-footer-category="valorant">Valorant VP</a></li>
+                        <li><a href="#" data-i18n="footer.lol" data-footer-category="lol">League of Legends RP</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h4 data-i18n="footer.support">Destek</h4>
+                    <ul>
+                        <li><a href="#" data-i18n="footer.faq" data-footer-page="faq">Sıkça Sorulan Sorular</a></li>
+                        <li><a href="#" data-i18n="footer.contact" data-footer-page="contact">İletişim</a></li>
+                        <li><a href="#" data-i18n="footer.refund" data-footer-page="refund">Geri İade</a></li>
+                        <li><a href="#" data-i18n="footer.terms" data-footer-page="terms">Kullanım Şartları</a></li>
+                    </ul>
+                </div>
+                
+                <div class="footer-section">
+                    <h4 data-i18n="footer.contact.title">İletişim</h4>
+                    <div class="contact-info">
+                        <p><i class="fas fa-envelope"></i> keycoglobal@gmail.com</p>
+                        <p><i class="fas fa-clock"></i> <span data-i18n="footer.support.247">7/24 Destek</span></p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p data-i18n="footer.copyright">&copy; 2025 Keyco. Tüm hakları saklıdır.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Chatbot Widget -->
+    <button id="backToTop" class="back-to-top" aria-label="Yukarı">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+    <div class="chatbot" id="chatbotRoot">
+        <button id="chatbotToggle" class="chatbot-toggle" aria-label="Destek">
+            <i class="fas fa-comment-dots"></i>
+        </button>
+        <div id="chatbotWidget" class="chatbot-widget" aria-live="polite" aria-hidden="true">
+            <div class="chatbot-header">
+                <div class="chatbot-title">
+                    <i class="fas fa-robot"></i>
+                    <span data-i18n="chat.title">Destek Botu</span>
+                </div>
+                <button class="chatbot-end" id="chatbotEnd" aria-label="Sohbeti Bitir">
+                    <i class="fas fa-flag-checkered"></i>
+                    <span data-i18n="chat.end">Sohbeti Bitir</span>
+                </button>
+                <button class="chatbot-close" id="chatbotClose" aria-label="Kapat">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="chatbot-messages" id="chatbotMessages"></div>
+            <div class="chatbot-quick" id="chatbotQuick"></div>
+            <form class="chatbot-input" id="chatbotForm">
+                <input type="text" id="chatbotText" placeholder="Sorunuzu yazın..." aria-label="Mesaj">
+                <button type="submit" class="chatbot-send"><i class="fas fa-paper-plane"></i> <span data-i18n="chat.send">Gönder</span></button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cookie Consent Bar -->
+    <div id="cookieConsent" class="cookie-consent" role="dialog" aria-live="polite" aria-label="Cookie Consent" style="display:none;">
+        <div class="cookie-consent-inner">
+            <span class="cookie-text">Deneyiminizi iyileştirmek için çerezleri kullanıyoruz.</span>
+            <div class="cookie-actions">
+                <button id="cookieAccept" class="cookie-btn primary">Kabul Et</button>
+                <button id="cookieDecline" class="cookie-btn outline">Reddet</button>
+            </div>
+        </div>
+    </div>
+
+    
+    <!-- Notifications Panel -->
+    <div class="notifications-panel" id="notificationsPanel">
+        <div class="notifications-header">
+            <h3 data-i18n="notifications.title">Bildirimler</h3>
+            <button onclick="markAllNotificationsRead()" class="mark-all-read-btn">
+                <i class="fas fa-check-double"></i>
+                <span data-i18n="notifications.markAllRead">Tümünü Okundu İşaretle</span>
+            </button>
+        </div>
+        <div class="notifications-list" id="notificationsList">
+            <!-- Notifications will be loaded here -->
+        </div>
+        <div class="notifications-empty" id="notificationsEmpty">
+            <i class="fas fa-bell-slash"></i>
+            <p data-i18n="notifications.empty">Henüz bildiriminiz yok</p>
+            </p>
+        </div>
+    </div>
+
+    <!-- Support Rating Widget -->
+    <div class="support-rating-widget" id="supportRatingWidget" style="display: none;">
+        <div class="support-rating-header">
+            <span class="support-rating-title">Destek Botunu Değerlendir</span>
+            <button class="support-rating-close" onclick="closeSupportRating()">×</button>
+        </div>
+        <div class="support-rating-stars">
+            <button class="star-btn" data-rating="1" onclick="setRating(1)">★</button>
+            <button class="star-btn" data-rating="2" onclick="setRating(2)">★</button>
+            <button class="star-btn" data-rating="3" onclick="setRating(3)">★</button>
+            <button class="star-btn" data-rating="4" onclick="setRating(4)">★</button>
+            <button class="star-btn" data-rating="5" onclick="setRating(5)">★</button>
+        </div>
+        <textarea class="support-rating-comment" id="supportComment" placeholder="Yorumunuzu yazın (opsiyonel)..."></textarea>
+        <button class="support-rating-submit" id="supportSubmitBtn" onclick="submitSupportRating()" disabled>Değerlendirmeyi Gönder</button>
+    </div>
+
+    <!-- Support Rating Success -->
+    <div class="support-rating-widget" id="supportRatingThanks" style="display: none;">
+        <div class="support-rating-thanks">
+            <i class="fas fa-check-circle" style="font-size: 48px; margin-bottom: 15px;"></i>
+            <div>Teşekkürler!</div>
+            <div>Değerlendirmeniz kaydedildi.</div>
+        </div>
+    </div>
+
+    <script src="script.js?v=80"></script>
+    <link rel="prefetch" href="verify.html">
+    <link rel="prefetch" href="reset.html">
+</body>
+</html>

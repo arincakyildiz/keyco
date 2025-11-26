@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hesap Doğrulama - Keyco</title>
+  <link rel="stylesheet" href="styles.css?v=3" />
+</head>
+<body>
+  <div class="admin-login" style="max-width:520px;margin-top:60px;">
+    <h2>Hesap Doğrulama</h2>
+    <p id="verifyStatus">Doğrulama işlemi yapılıyor...</p>
+    <div class="admin-actions" style="margin-top:12px;">
+      <a class="btn" href="/admin">Admin Paneline Dön</a>
+      <a class="btn" href="/">Ana Sayfa</a>
+    </div>
+  </div>
+  <script>
+    (async () => {
+      const p = new URLSearchParams(location.search);
+      const token = p.get('token');
+      const el = document.getElementById('verifyStatus');
+      if (!token) {
+        if (p.get('ok') === '1') { el.textContent = 'Hesabınız doğrulandı. Giriş yapabilirsiniz.'; return; }
+        el.textContent = 'Geçersiz istek.';
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/verify?token=' + encodeURIComponent(token));
+        const txt = await res.text();
+        el.textContent = res.ok ? 'Hesabınız doğrulandı. Giriş yapabilirsiniz.' : ('Doğrulama başarısız: ' + txt);
+      } catch (e) {
+        el.textContent = 'Ağ hatası.';
+      }
+    })();
+  </script>
+</body>
+</html>
+
+

@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keyco Admin</title>
+                   <link rel="stylesheet" href="styles.css?v=15">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="adminApp">
+        <div class="admin-login" id="adminLogin">
+            <h2>Admin Girişi</h2>
+            <div class="form-group">
+                <label for="adminEmail">E-posta</label>
+                <input type="email" id="adminEmail" placeholder="keycoglobal@gmail.com">
+            </div>
+                         <div class="form-group">
+                 <label for="adminPassword">Şifre</label>
+                 <div class="password-input-container">
+                     <input type="password" id="adminPassword" placeholder="Şifre">
+                     <button type="button" class="password-toggle">
+                         <i class="fas fa-eye"></i>
+                     </button>
+                 </div>
+             </div>
+                                      <div class="admin-actions">
+                 <button class="btn primary" id="adminLoginBtn"><i class="fas fa-sign-in-alt"></i> Giriş</button>
+             </div>
+            <div id="adminOtpSection" style="display:none; margin-top:12px;">
+                <div class="form-group">
+                    <label for="adminOtp">E‑posta Doğrulama Kodu</label>
+                    <div class="otp-input-container">
+                        <input type="text" id="adminOtp" inputmode="numeric" maxlength="6" placeholder="6 haneli kod">
+                        <div class="otp-timer" id="otpTimer" style="display:none;">
+                            <span id="timerText">2:00</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="admin-actions">
+                    <button class="btn primary" id="adminVerifyOtpBtn"><i class="fas fa-check"></i> Kodu Doğrula</button>
+                    <button class="btn" id="adminResendOtpBtn"><i class="fas fa-paper-plane"></i> Yeniden Gönder</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="admin-container" id="adminDashboard" style="display:none;">
+            <div class="admin-layout">
+
+                
+                <aside class="admin-sidebar admin-card" id="adminSidebar">
+                    <div class="admin-card-header">
+                        <span>Yönetim</span>
+                        
+                    </div>
+                    <div class="admin-card-body">
+                        <nav>
+                            <button class="btn" id="navProducts"><i class="fas fa-box"></i> Ürünler</button>
+                            <button class="btn" id="navOrders"><i class="fas fa-shopping-bag"></i> Siparişler</button>
+                            <button class="btn" id="navPayments"><i class="fas fa-credit-card"></i> Ödemeler</button>
+                            <button class="btn" id="navContacts"><i class="fas fa-envelope"></i> Mesajlar</button>
+                            <button class="btn" id="navUsers"><i class="fas fa-users"></i> Kullanıcılar</button>
+                                                         <button class="btn" id="navSupport"><i class="fas fa-star"></i> Destek</button>
+                             <button class="btn" id="navFeatured"><i class="fas fa-star-of-life"></i> Öne Çıkan Ürünler</button>
+                             <button class="btn" id="navCoupons"><i class="fas fa-ticket-alt"></i> Kuponlar</button>
+                             <button class="btn" id="navReviews"><i class="fas fa-comments"></i> Yorumlar</button>
+                                                         <button class="btn" id="navNotifications"><i class="fas fa-bell"></i> Bildirimler</button>
+                            <button class="btn" id="btnLogout"><i class="fas fa-sign-out-alt"></i> Çıkış</button>
+                        </nav>
+                    </div>
+                </aside>
+                <main class="admin-content">
+                    <!-- Stok Uyarı Paneli -->
+                    <div class="admin-card" id="stockAlertsCard" style="display: none; margin-bottom: 20px;">
+                        <div class="admin-card-header" style="background: #dc3545; color: white;">
+                            <span style="color: white; font-weight: bold;">🚨 Stok Uyarıları</span>
+                            <button class="btn" id="dismissAlertsBtn" style="background: rgba(255,255,255,0.3); color: white; border: 1px solid rgba(255,255,255,0.5);">
+                                <i class="fas fa-times"></i> Kapat
+                            </button>
+                        </div>
+                        <div class="admin-card-body">
+                            <div id="stockAlertsList"></div>
+                        </div>
+                    </div>
+
+                    <!-- Ürünler Kartı -->
+                    <div class="admin-card" id="productsCard">
+                        <div class="admin-card-header">
+                            <span>📦 Ürünler</span>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn" id="stockReportBtn" style="background: var(--info-color); color: white;">
+                                    <i class="fas fa-chart-bar"></i> Stok Raporu
+                                </button>
+                                <button class="btn primary" id="btnOpenNewProduct" onclick="openProductModal()">
+                                    <i class="fas fa-plus"></i> Yeni Ürün Ekle
+                                </button>
+                            </div>
+                        </div>
+                        <div class="admin-card-body">
+                            <!-- Ürün Filtreleri -->
+                            <div class="admin-filters">
+                                <div class="filter-row">
+                                    <div class="filter-group">
+                                        <label>Kategori:</label>
+                                        <select id="productCategoryFilter">
+                                            <option value="">Tüm Kategoriler</option>
+                                            <option value="valorant">Valorant</option>
+                                            <option value="steam">Steam</option>
+                                            <option value="lol">League of Legends</option>
+                                            <option value="other">Diğer</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="filter-group">
+                                        <label>Platform:</label>
+                                        <select id="productPlatformFilter">
+                                            <option value="">Tüm Platformlar</option>
+                                            <option value="steam">Steam</option>
+                                            <option value="valorant">Valorant</option>
+                                            <option value="lol">League of Legends</option>
+                                            <option value="other">Diğer</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="filter-group">
+                                        <label>Stok Durumu:</label>
+                                        <select id="productStockFilter">
+                                            <option value="">Tüm Ürünler</option>
+                                            <option value="no_stock">Stok Yok</option>
+                                            <option value="low_stock">Düşük Stok (≤3)</option>
+                                            <option value="good_stock">Bol Stok (>3)</option>
+                                            <option value="no_codes">Kod Eklenmemiş</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="filter-group">
+                                        <label>Paket Seviyesi:</label>
+                                        <select id="productPackageFilter">
+                                            <option value="">Tüm Paketler</option>
+                                            <option value="low">Düşük</option>
+                                            <option value="medium">Orta</option>
+                                            <option value="high">Yüksek</option>
+                                            <option value="random">Rastgele</option>
+                                            <option value="standard">Standart</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="filter-group">
+                                        <label>İndirim:</label>
+                                        <select id="productDiscountFilter">
+                                            <option value="">Tümü</option>
+                                            <option value="has_discount">İndirimli</option>
+                                            <option value="no_discount">İndirimsiz</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="filter-group">
+                                        <label>Arama:</label>
+                                        <input type="text" id="productSearchFilter" placeholder="Ürün adı, slug veya açıklama..." onkeypress="if(event.key==='Enter') applyProductFilters()">
+                                    </div>
+                                    
+                                    <button class="btn primary" onclick="applyProductFilters()">
+                                        <i class="fas fa-filter"></i> Filtrele
+                                    </button>
+                                    
+                                    <button class="btn" onclick="clearProductFilters()">
+                                        <i class="fas fa-times"></i> Temizle
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="full-width-table" style="overflow-x: auto;">
+                                <table class="admin-table" id="tblProducts" style="min-width: 1400px; width: 100%; table-layout: fixed;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 50px;">ID</th>
+                                            <th style="width: 180px;">Ad</th>
+                                            <th style="width: 180px;">Slug</th>
+                                            <th style="width: 80px;">Fiyat</th>
+                                            <th style="width: 40px;">₺</th>
+                                            <th style="width: 80px;">Kategori</th>
+                                            <th style="width: 80px;">Platform</th>
+                                            <th style="width: 70px;">Paket</th>
+                                            <th style="width: 80px;">İndirim</th>
+                                            <th style="width: 90px;">Kod Stok</th>
+                                            <th style="width: 180px;">İşlemler</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card" id="ordersCard">
+                        <div class="admin-card-header">Siparişler</div>
+                        <div class="admin-card-body">
+                                                         <div class="full-width-table">
+                                 <table class="admin-table" id="tblOrders">
+                                 <thead>
+                                     <tr><th>ID</th><th>Kullanıcı Bilgileri</th><th>Tutar</th><th>Durum</th><th>Tarih</th></tr>
+                                 </thead>
+                                 <tbody></tbody>
+                             </table>
+                             </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card" id="paymentsCard" style="display:none;">
+                        <div class="admin-card-header">Ödemeler</div>
+                        <div class="admin-card-body">
+                            <div class="full-width-table">
+                                <table class="admin-table" id="tblPayments">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Kullanıcı</th>
+                                            <th>Sipariş</th>
+                                            <th>Tutar</th>
+                                            <th>Sağlayıcı</th>
+                                            <th>Durum</th>
+                                            <th>Tarih</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card" id="contactsCard">
+                        <div class="admin-card-header">İletişim Mesajları</div>
+                        <div class="admin-card-body">
+                            <div class="full-width-table">
+                            <table class="admin-table" id="tblContacts">
+                                <thead>
+                                    <tr><th>ID</th><th>Ad</th><th>E-posta</th><th>Konu</th><th>Mesaj</th><th>Tarih</th><th>İşlem</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card" id="usersCard">
+                        <div class="admin-card-header">Kullanıcılar</div>
+                        <div class="admin-card-body">
+                            <div class="full-width-table">
+                            <table class="admin-table" id="tblUsers">
+                                <thead>
+                                    <tr><th>ID</th><th>Ad</th><th>E-posta</th><th>Rol</th><th>Doğrulama</th><th>Tarih</th><th>İşlem</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-card" id="supportCard">
+                        <div class="admin-card-header">
+                            <span>Destek Değerlendirmeleri</span>
+                            <div class="support-summary">
+                                <span class="summary-item">
+                                    <i class="fas fa-star"></i>
+                                    <span id="totalRatings">0</span> değerlendirme
+                                </span>
+                                <span class="summary-item">
+                                    <i class="fas fa-chart-line"></i>
+                                    Ortalama: <span id="avgRating">-</span>
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Filter Section -->
+                        <div class="admin-filters">
+                            <div class="filter-row">
+                                <div class="filter-group">
+                                    <label>Puan:</label>
+                                    <select id="ratingFilter">
+                                        <option value="">Tümü</option>
+                                        <option value="1">1 Yıldız</option>
+                                        <option value="2">2 Yıldız</option>
+                                        <option value="3">3 Yıldız</option>
+                                        <option value="4">4 Yıldız</option>
+                                        <option value="5">5 Yıldız</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="filter-group">
+                                    <label>Yorum:</label>
+                                    <select id="commentFilter">
+                                        <option value="">Tümü</option>
+                                        <option value="true">Yorumlu</option>
+                                        <option value="false">Yorumsuz</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="filter-group">
+                                    <label>Tarih Başlangıç:</label>
+                                    <input type="date" id="dateFromFilter">
+                                </div>
+                                
+                                <div class="filter-group">
+                                    <label>Tarih Bitiş:</label>
+                                    <input type="date" id="dateToFilter">
+                                </div>
+                                
+                                <div class="filter-group">
+                                    <label>Arama:</label>
+                                    <input type="text" id="searchFilter" placeholder="Yorum veya e-posta ara...">
+                                </div>
+                                
+                                <button class="btn primary" onclick="applySupportFilters()">
+                                    <i class="fas fa-filter"></i> Filtrele
+                                </button>
+                                
+                                <button class="btn" onclick="clearSupportFilters()">
+                                    <i class="fas fa-times"></i> Temizle
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="admin-card-body">
+                            <div class="full-width-table">
+                            <table class="admin-table" id="tblSupport">
+                                <thead>
+                                    <tr><th>ID</th><th>Puan</th><th>Yorum</th><th>Kullanıcı</th><th>Tarih</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                            </div>
+                        </div>
+                    </div>
+
+                                         <!-- Öne Çıkan Ürünler Card -->
+                     <div class="admin-card" id="featuredCard">
+                         <div class="admin-card-header">
+                             <span>Öne Çıkan Ürünler Yönetimi</span>
+                             <button class="btn primary" id="addFeaturedBtn">
+                                 <i class="fas fa-plus"></i> Yeni Öne Çıkan Ekle
+                             </button>
+                         </div>
+                         <div class="admin-card-body">
+                             <div class="featured-summary">
+                                 <span class="summary-item">
+                                     <i class="fas fa-star-of-life"></i>
+                                     <span id="totalFeatured">0</span> öne çıkan ürün
+                                 </span>
+                                 <span class="summary-item">
+                                     <i class="fas fa-tags"></i>
+                                     Toplam değer: ₺<span id="totalFeaturedValue">0</span>
+                                 </span>
+                             </div>
+                                                          
+                             <div class="full-width-table">
+                                <table class="admin-table" id="tblFeatured">
+                                    <thead>
+                                        <tr>
+                                            <th>Sıra</th>
+                                            <th>Resim</th>
+                                            <th>Ürün Adı</th>
+                                            <th>Platform</th>
+                                            <th>Fiyat</th>
+                                            <th>İndirim</th>
+                                            <th>Badge</th>
+                                            <th>İkon</th>
+                                            <th>İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                             </div>
+                         </div>
+                     </div>
+                     
+                     <!-- Kuponlar Card -->
+                     <div class="admin-card" id="couponsCard">
+                         <div class="admin-card-header">
+                             <span>Kupon ve İndirim Kodu Yönetimi</span>
+                             <button class="btn primary" id="addCouponBtn">
+                                 <i class="fas fa-plus"></i> Yeni Kupon Ekle
+                             </button>
+                         </div>
+                         <div class="admin-card-body">
+                             <div class="coupon-summary" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+                                 <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
+                                     <i class="fas fa-info-circle"></i> 
+                                     Kuponlar müşterilerin siparişlerinde kullanabileceği indirim kodlarıdır. 
+                                     Yüzde veya sabit tutar indirimi olarak ayarlanabilir.
+                                 </p>
+                             </div>
+                                                 <div class="admin-card-body">
+                            <div class="full-width-table">
+                                <table class="admin-table" id="tblCoupons">
+                                                                         <thead>
+                                         <tr>
+                                             <th>ID</th>
+                                             <th>Kod</th>
+                                             <th>Tür</th>
+                                             <th>İndirim</th>
+                                             <th>Min. Tutar</th>
+                                             <th>Kullanım</th>
+                                             <th>Geçerlilik</th>
+                                             <th>Durum</th>
+                                             <th>İşlem</th>
+                                         </tr>
+                                     </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                     </div>
+                     
+                     <!-- Ürün Yorumları Card -->
+                     <div class="admin-card" id="reviewsCard">
+                         <div class="admin-card-header">
+                             <span>Ürün Yorumları ve Değerlendirmeleri</span>
+                         </div>
+                         <div class="admin-card-body">
+                             <div class="review-summary" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+                                 <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
+                                     <i class="fas fa-info-circle"></i> 
+                                     Müşterilerin ürünler hakkında yaptığı yorumları ve puanları buradan yönetebilirsiniz. 
+                                     Yorumları onaylayabilir veya reddedebilirsiniz.
+                                 </p>
+                             </div>
+                                                 <div class="admin-card-body">
+                            <div class="full-width-table">
+                                <table class="admin-table" id="tblReviews">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Ürün</th>
+                                            <th>Puan</th>
+                                            <th>Başlık</th>
+                                            <th>Yorum</th>
+                                            <th>Onay</th>
+                                            <th>Tarih</th>
+                                            <th>İşlem</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                     </div>
+                     
+                     <!-- Bildirimler Card -->
+                     <div class="admin-card" id="notificationsCard">
+                         <div class="admin-card-header">
+                             <span>Bildirim Yönetimi</span>
+                             <button class="btn primary" id="addNotificationBtn">
+                                 <i class="fas fa-plus"></i> Yeni Bildirim Gönder
+                             </button>
+                         </div>
+                         <div class="admin-card-body">
+                             <div class="notification-summary" style="margin-bottom: 20px; padding: 15px; background: var(--bg-secondary); border-radius: 8px;">
+                                 <p style="margin: 0; color: var(--text-secondary); font-size: 14px;">
+                                     <i class="fas fa-info-circle"></i> 
+                                     Kullanıcılara bildirim gönderebilir ve gönderilen bildirimleri buradan takip edebilirsiniz.
+                                 </p>
+                             </div>
+                             <div class="admin-card-body">
+                                 <div class="full-width-table">
+                                     <table class="admin-table" id="tblNotifications">
+                                         <thead>
+                                             <tr>
+                                                 <th>ID</th>
+                                                 <th>Kullanıcı</th>
+                                                 <th>Başlık</th>
+                                                 <th>Mesaj</th>
+                                                 <th>Tür</th>
+                                                 <th>Okundu</th>
+                                                 <th>Tarih</th>
+                                             </tr>
+                                         </thead>
+                                         <tbody></tbody>
+                                     </table>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div class="modal-overlay admin" id="productModal">
+        <div class="modal admin">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">📦 Ürün Yönetimi</strong>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn" onclick="prefillValorantPackage('low')" title="Valorant Düşük Paket" style="background: #28a745; color: white; font-size: 11px; padding: 4px 8px;">Valorant Düşük</button>
+                    <button class="btn" onclick="prefillValorantPackage('medium')" title="Valorant Orta Paket" style="background: #ffc107; color: white; font-size: 11px; padding: 4px 8px;">Valorant Orta</button>
+                    <button class="btn" onclick="prefillValorantPackage('high')" title="Valorant Yüksek Paket" style="background: #dc3545; color: white; font-size: 11px; padding: 4px 8px;">Valorant Yüksek</button>
+                    <button class="btn" onclick="prefillSteamPackage('low')" title="Steam Düşük Paket" style="background: #17a2b8; color: white; font-size: 11px; padding: 4px 8px;">Steam Düşük</button>
+                    <button class="btn" onclick="prefillSteamPackage('medium')" title="Steam Orta Paket" style="background: #6f42c1; color: white; font-size: 11px; padding: 4px 8px;">Steam Orta</button>
+                    <button class="btn" onclick="prefillSteamPackage('high')" title="Steam Yüksek Paket" style="background: #fd7e14; color: white; font-size: 11px; padding: 4px 8px;">Steam Yüksek</button>
+                    <button class="btn" id="closeProductModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Ad <span style="color: #ff4757;">*</span></label>
+                        <input type="text" id="pName" placeholder="Örn: Valorant 1000 VP" required>
+                        <small style="color: var(--text-muted); font-size: 12px;">Ürünün görünen adı</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Slug <span style="color: #ff4757;">*</span></label>
+                        <input type="text" id="pSlug" placeholder="Örn: valorant-1000-vp" required>
+                        <small style="color: var(--text-muted); font-size: 12px;">URL'de kullanılacak benzersiz tanımlayıcı (otomatik oluşturulur)</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Fiyat (₺) <span style="color: #ff4757;">*</span></label>
+                        <input type="number" id="pPrice" value="0" step="0.01" min="0.01" oninput="updateDiscountPreview()" onchange="updateDiscountPreview()" placeholder="0.00" required>
+                        <small style="color: var(--text-muted); font-size: 12px;">Ürünün satış fiyatı</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Para Birimi</label>
+                        <select id="pCurrency" value="TRY">
+                            <option value="TRY" selected>TRY - Türk Lirası</option>
+                            <option value="USD">USD - Amerikan Doları</option>
+                            <option value="EUR">EUR - Euro</option>
+                        </select>
+                        <small style="color: var(--text-muted); font-size: 12px;">Fiyat para birimi</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Kategori</label>
+                        <select id="pCategory">
+                            <option value="">Kategori seçin...</option>
+                            <option value="valorant">Valorant</option>
+                            <option value="valorant-rastgele-vp">Valorant Rastgele VP</option>
+                            <option value="steam">Steam</option>
+                            <option value="lol">League of Legends</option>
+                            <option value="other">Diğer</option>
+                        </select>
+                        <small style="color: var(--text-muted); font-size: 12px;">Ürünün ana kategorisi</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Platform</label>
+                        <select id="pPlatform">
+                            <option value="">Platform seçin...</option>
+                            <option value="steam">Steam</option>
+                            <option value="valorant">Valorant</option>
+                            <option value="lol">League of Legends</option>
+                            <option value="other">Diğer</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Paket Seviyesi</label>
+                        <select id="pPackageLevel">
+                            <option value="">Paket seviyesi seçin...</option>
+                            <option value="low">Düşük</option>
+                            <option value="medium">Orta</option>
+                            <option value="high">Yüksek</option>
+                            <option value="random">Rastgele</option>
+                            <option value="standard">Standart</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>İndirim (%)</label>
+                        <div class="discount-input-container">
+                            <input type="number" id="pDiscount" min="0" max="100" value="0" placeholder="0" oninput="updateDiscountPreview()" onchange="updateDiscountPreview()">
+                            <div class="discount-preview" id="discountPreview" style="display: none;">
+                                <div class="preview-badge">%<span id="previewPercent">0</span></div>
+                                <div class="preview-prices">
+                                    <span class="preview-old-price">₺<span id="previewOldPrice">0.00</span></span>
+                                    <span class="preview-new-price">₺<span id="previewNewPrice">0.00</span></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="grid-column: 1/-1;">
+                        <label>Açıklama</label>
+                        <textarea id="pDesc" rows="3" placeholder="Ürün hakkında kısa açıklama..."></textarea>
+                        <small style="color: var(--text-muted); font-size: 12px;">Ürünün özelliklerini ve detaylarını açıklayın</small>
+                    </div>
+                </div>
+                <div class="admin-actions" style="margin-top:12px;">
+                    <button class="btn" id="closeProductModal" style="margin-right: 10px;"><i class="fas fa-times"></i> İptal</button>
+                    <button class="btn primary" id="saveProductBtn"><i class="fas fa-save"></i> Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Codes Modal -->
+    <div class="modal-overlay admin" id="codesModal">
+        <div class="modal admin">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">🔑 Ürün Kodları Yönetimi</strong>
+                <button class="btn" id="closeCodesModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert info" style="background: #d1ecf1; color: #0c5460; padding: 12px; border-radius: 6px; border-left: 4px solid #bee5eb; margin-bottom: 20px;">
+                    <i class="fas fa-info-circle"></i> <strong>Kod Ekleme:</strong> Aşağıdaki alana her satıra bir kod yazarak toplu kod ekleyebilirsiniz. Kodlar otomatik olarak stok olarak eklenir.
+                </div>
+                <div class="row">
+                    <div class="form-group" style="grid-column: 1/-1;">
+                        <label><strong>📝 Toplu Kod Ekle</strong> (her satıra bir kod yazın)</label>
+                        <textarea id="codesBulk" rows="6" placeholder="Örnek:\nABC-123-XYZ\nDEF-456-UVW\nGHI-789-RST\n\nHer satıra bir kod yazın..." style="font-family: monospace;"></textarea>
+                    </div>
+                    <div class="admin-actions" style="grid-column: 1/-1;">
+                        <button class="btn primary" id="btnCodesImport" style="background: #28a745; border-color: #28a745;">
+                            <i class="fas fa-plus-circle"></i> Kodları Stok Olarak Ekle
+                        </button>
+                    </div>
+                </div>
+                <div class="full-width-table" style="margin-top: 12px;">
+                    <table class="admin-table" id="tblCodes">
+                        <thead>
+                            <tr>
+                                <th style="color: #333;">ID</th>
+                                <th style="color: #333;">Kod</th>
+                                <th style="color: #333;">Kullanım</th>
+                                <th style="color: #333;">Tarih</th>
+                                <th style="color: #333;">İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stok Raporu Modal -->
+    <div class="modal-overlay admin" id="stockReportModal">
+        <div class="modal admin" style="max-width: 800px;">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">📊 Stok Raporu</strong>
+                <button class="btn" id="closeStockReportModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="stock-summary">
+                    <div class="stock-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div class="stock-stat-card" style="background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #c3e6cb;">
+                            <div style="font-size: 24px; font-weight: bold;" id="goodStockCount">0</div>
+                            <div>Bol Stok (>3)</div>
+                        </div>
+                        <div class="stock-stat-card" style="background: #fff3cd; color: #856404; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #ffeaa7;">
+                            <div style="font-size: 24px; font-weight: bold;" id="lowStockCount">0</div>
+                            <div>Düşük Stok (≤3)</div>
+                        </div>
+                        <div class="stock-stat-card" style="background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #f5c6cb;">
+                            <div style="font-size: 24px; font-weight: bold;" id="noStockCount">0</div>
+                            <div>Stok Yok</div>
+                        </div>
+                        <div class="stock-stat-card" style="background: #e2e3e5; color: #383d41; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #d6d8db;">
+                            <div style="font-size: 24px; font-weight: bold;" id="noCodesCount">0</div>
+                            <div>Kod Eklenmemiş</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="stock-export-actions" style="margin-bottom: 20px;">
+                    <button class="btn primary" id="exportStockBtn" style="background: #007bff; color: white; border: none;">
+                        <i class="fas fa-download"></i> Stok Raporu İndir (CSV)
+                    </button>
+                    <button class="btn" id="refreshStockBtn" style="background: #6c757d; color: white; border: none;">
+                        <i class="fas fa-sync"></i> Yenile
+                    </button>
+                </div>
+                <div class="full-width-table">
+                    <table class="admin-table" id="stockReportTable">
+                        <thead>
+                            <tr>
+                                <th style="color: #333;">Ürün</th>
+                                <th style="color: #333;">Kategori</th>
+                                <th style="color: #333;">Platform</th>
+                                <th style="color: #333;">Toplam Kod</th>
+                                <th style="color: #333;">Mevcut</th>
+                                <th style="color: #333;">Kullanılan</th>
+                                <th style="color: #333;">Durum</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Featured Product Modal -->
+    <div class="modal-overlay admin" id="featuredModal">
+        <div class="modal admin">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">⭐ Öne Çıkan Ürün</strong>
+                <button class="btn" id="closeFeaturedModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Ürün Adı</label>
+                        <input type="text" id="fName" placeholder="Örn: Valorant 3650 VP">
+                    </div>
+                    <div class="form-group">
+                        <label>Platform</label>
+                        <input type="text" id="fPlatform" placeholder="Örn: Valorant">
+                    </div>
+                    <div class="form-group">
+                        <label>Fiyat (₺)</label>
+                        <input type="number" id="fPrice" value="0" min="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>İndirim Oranı (%)</label>
+                        <input type="number" id="fDiscount" value="0" min="0" max="100" placeholder="0 = İndirim yok">
+                    </div>
+                    <div class="form-group">
+                        <label>Badge Türü</label>
+                        <select id="fBadge">
+                            <option value="">Badge yok</option>
+                            <option value="discount">İndirim</option>
+                            <option value="hot">Popüler</option>
+                            <option value="new">Yeni</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>İkon</label>
+                        <div class="icon-select-container">
+                            <select id="fIcon" class="icon-select" onchange="previewIcon()">
+                                <option value="">İkon seçin...</option>
+                                <option value="fas fa-gamepad">🎮 Oyun</option>
+                                <option value="fas fa-crosshairs">🎯 Nişan</option>
+                                <option value="fas fa-crown">👑 Taç</option>
+                                <option value="fas fa-dragon">🐉 Ejderha</option>
+                                <option value="fas fa-dice">🎲 Zar</option>
+                                <option value="fab fa-steam">💨 Steam</option>
+                                <option value="fas fa-fire">🔥 Ateş</option>
+                                <option value="fas fa-star">⭐ Yıldız</option>
+                                <option value="fas fa-gem">💎 Mücevher</option>
+                                <option value="fas fa-rocket">🚀 Roket</option>
+                                <option value="fas fa-sword">⚔️ Kılıç</option>
+                                <option value="fas fa-shield">🛡️ Kalkan</option>
+                                <option value="fas fa-magic">✨ Sihir</option>
+                                <option value="fas fa-heart">❤️ Kalp</option>
+                                <option value="fas fa-bolt">⚡ Şimşek</option>
+                                <option value="fas fa-trophy">🏆 Kupa</option>
+                                <option value="fas fa-medal">🥇 Madalya</option>
+                                <option value="fas fa-flag">🚩 Bayrak</option>
+                                <option value="fas fa-gift">🎁 Hediye</option>
+                            </select>
+                            <div id="iconPreview" class="icon-preview"></div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Sıra</label>
+                        <input type="number" id="fOrder" value="1" min="1" max="10">
+                    </div>
+                </div>
+                <div class="admin-actions" style="margin-top:12px;">
+                    <button class="btn primary" id="saveFeaturedBtn"><i class="fas fa-save"></i> Kaydet</button>
+                    <button class="btn" id="deleteFeaturedBtn" style="display:none;"><i class="fas fa-trash"></i> Sil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Coupon Modal -->
+    <div class="modal-overlay admin" id="couponModal">
+        <div class="modal admin">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">🎫 Kupon Yönetimi</strong>
+                <button class="btn" id="closeCouponModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Kupon Kodu</label>
+                        <input type="text" id="cCode" placeholder="Örn: YENI10">
+                    </div>
+                    <div class="form-group">
+                        <label>İndirim Türü</label>
+                        <select id="cType">
+                            <option value="percentage">Yüzde (%)</option>
+                            <option value="fixed">Sabit Tutar (₺)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>İndirim Değeri</label>
+                        <input type="number" id="cValue" value="0" min="0" step="0.01" placeholder="Örn: 15">
+                        <small id="cValueHelp">Yüzde için 0-100, sabit tutar için kuruş cinsinden</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Minimum Sipariş Tutarı (₺)</label>
+                        <input type="number" id="cMinOrder" value="0" min="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Maksimum Kullanım</label>
+                        <input type="number" id="cMaxUses" value="-1" min="-1">
+                        <small>-1 = Sınırsız</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Geçerlilik Tarihi</label>
+                        <input type="datetime-local" id="cValidUntil">
+                        <small>Boş bırakılırsa süresiz olur</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Durum</label>
+                        <select id="cStatus">
+                            <option value="1">Aktif</option>
+                            <option value="0">Pasif</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Hedef Tür</label>
+                        <select id="cTargetType">
+                            <option value="all">Tümü</option>
+                            <option value="category">Kategori</option>
+                            <option value="platform">Platform</option>
+                            <option value="product">Ürün</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="grid-column: 1/-1;">
+                        <label>Hedef Değerler (seç veya yaz)</label>
+                        <input type="text" id="cTargetValues" list="targetPresets" placeholder="Örn: valorant,lol | steam | 12,15,24">
+                        <datalist id="targetPresets">
+                            <option value="valorant,lol">valorant + lol</option>
+                            <option value="steam">steam</option>
+                        </datalist>
+                        <small>Hedef türüne göre: kategori/platform adları veya ürün ID’leri</small>
+                    </div>
+                </div>
+                <div class="admin-actions" style="margin-top:12px;">
+                    <button class="btn primary" id="saveCouponBtn"><i class="fas fa-save"></i> Kaydet</button>
+                    <button class="btn" id="deleteCouponBtn" style="display:none;"><i class="fas fa-trash"></i> Sil</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div class="modal-overlay admin" id="notificationModal">
+        <div class="modal admin">
+            <div class="modal-header" style="background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+                <strong style="color: #000000 !important; font-weight: bold; font-size: 18px;">🔔 Bildirim Gönder</strong>
+                <button class="btn" id="closeNotificationModal" style="background: #6c757d; color: white;"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="form-group">
+                        <label>Başlık</label>
+                        <input type="text" id="nTitle" placeholder="Bildirim başlığı">
+                    </div>
+                    <div class="form-group" style="grid-column: 1/-1;">
+                        <label>Mesaj</label>
+                        <textarea id="nMessage" rows="4" placeholder="Bildirim mesajı"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Tür</label>
+                        <select id="nType">
+                            <option value="admin">Admin</option>
+                            <option value="info">Bilgi</option>
+                            <option value="warning">Uyarı</option>
+                            <option value="promotion">Promosyon</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Hedef</label>
+                        <select id="nTarget">
+                            <option value="all">Tüm Kullanıcılar</option>
+                            <option value="specific">Belirli Kullanıcılar</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="userSelectGroup" style="grid-column: 1/-1; display: none;">
+                        <label>Kullanıcılar</label>
+                        <select id="nUsers" multiple>
+                            <!-- Users will be loaded dynamically -->
+                        </select>
+                        <small>Ctrl+Click ile birden fazla seçebilirsiniz</small>
+                    </div>
+                </div>
+                <div class="admin-actions" style="margin-top:12px;">
+                    <button class="btn primary" id="sendNotificationBtn"><i class="fas fa-paper-plane"></i> Gönder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+                                                                               <script src="admin.js?v=31"></script>
+</body>
+</html>
+
+
