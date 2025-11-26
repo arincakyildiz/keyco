@@ -313,15 +313,44 @@ async function seedData() {
         
         // Steam Products
         // Normal Steam ürünleri: hepsi st.png kullanır
+        // Fiyatlar TL cinsinden (kuruş: TL * 100, örn: 299₺ = 29900)
         { name: 'Steam Cüzdan Kodu 50 TL', slug: 'steam-wallet-50tl', description: '50 TL Steam Cüzdan Kodu', price: 5000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
         { name: 'Steam Cüzdan Kodu 100 TL', slug: 'steam-wallet-100tl', description: '100 TL Steam Cüzdan Kodu', price: 10000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
         { name: 'Steam Cüzdan Kodu 200 TL', slug: 'steam-wallet-200tl', description: '200 TL Steam Cüzdan Kodu', price: 20000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'high', discount: 0, image_url: 'st.png' },
+        
+        // Popüler Steam Oyunları (fiyatlar TL cinsinden)
+        { name: 'Counter-Strike 2', slug: 'counter-strike-2', description: 'Counter-Strike 2 Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Dota 2', slug: 'dota-2', description: 'Dota 2 Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'PUBG: BATTLEGROUNDS', slug: 'pubg-battlegrounds', description: 'PUBG: BATTLEGROUNDS Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Apex Legends', slug: 'apex-legends', description: 'Apex Legends Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Call of Duty: Warzone', slug: 'call-of-duty-warzone', description: 'Call of Duty: Warzone Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'The Witcher 3: Wild Hunt', slug: 'the-witcher-3', description: 'The Witcher 3: Wild Hunt Steam Key', price: 128000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Fall Guys', slug: 'fall-guys', description: 'Fall Guys Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Rust', slug: 'rust', description: 'Rust Steam Key', price: 128000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Terraria', slug: 'terraria', description: 'Terraria Steam Key', price: 32000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Left 4 Dead 2', slug: 'left-4-dead-2', description: 'Left 4 Dead 2 Steam Key', price: 32000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Team Fortress 2', slug: 'team-fortress-2', description: 'Team Fortress 2 Steam Key', price: 0, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Half-Life: Alyx', slug: 'half-life-alyx', description: 'Half-Life: Alyx Steam Key', price: 192000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Portal 2', slug: 'portal-2', description: 'Portal 2 Steam Key', price: 32000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Among Us', slug: 'among-us', description: 'Among Us Steam Key', price: 16000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Phasmophobia', slug: 'phasmophobia', description: 'Phasmophobia Steam Key', price: 44800, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Valheim', slug: 'valheim', description: 'Valheim Steam Key', price: 64000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Hades', slug: 'hades', description: 'Hades Steam Key', price: 80000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Dead by Daylight', slug: 'dead-by-daylight', description: 'Dead by Daylight Steam Key', price: 64000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Stardew Valley', slug: 'stardew-valley', description: 'Stardew Valley Steam Key', price: 48000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Hollow Knight', slug: 'hollow-knight', description: 'Hollow Knight Steam Key', price: 48000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Cuphead', slug: 'cuphead', description: 'Cuphead Steam Key', price: 64000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Subnautica', slug: 'subnautica', description: 'Subnautica Steam Key', price: 96000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'ARK: Survival Evolved', slug: 'ark-survival-evolved', description: 'ARK: Survival Evolved Steam Key', price: 64000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Garry\'s Mod', slug: 'garrys-mod', description: 'Garry\'s Mod Steam Key', price: 32000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Don\'t Starve Together', slug: 'dont-starve-together', description: 'Don\'t Starve Together Steam Key', price: 48000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
         { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077', description: 'Cyberpunk 2077 PC Oyunu', price: 59900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 10, image_url: 'st.png' },
         { name: 'Grand Theft Auto V', slug: 'gta-v', description: 'Grand Theft Auto V PC Oyunu', price: 29900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 5, image_url: 'st.png' },
         { name: 'Elden Ring', slug: 'elden-ring', description: 'Elden Ring PC Oyunu', price: 69900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
         { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
         
         // Steam Rastgele Oyun Paketleri (3 ayrı paket: düşük, orta, yüksek)
+        // Fiyatlar TL cinsinden
         { name: 'Steam Rastgele Oyun (Düşük Paket)', slug: 'steam-random-dusuk', description: 'Steam Rastgele Oyun - Düşük Paket', price: 25000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st.png' },
         { name: 'Steam Rastgele Oyun (Orta Paket)', slug: 'steam-random-orta', description: 'Steam Rastgele Oyun - Orta Paket', price: 50000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st1.png' },
         { name: 'Steam Rastgele Oyun (Yüksek Paket)', slug: 'steam-random-yuksek', description: 'Steam Rastgele Oyun - Yüksek Paket', price: 100000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st2.png' }
