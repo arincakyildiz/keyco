@@ -19,6 +19,16 @@ const app = express();
 const PORT = process.env.PORT || 5500;
 const IS_PROD = String(process.env.NODE_ENV).toLowerCase() === 'production';
 
+// Trust proxy for Vercel, AWS Lambda, and other serverless platforms
+// This allows Express to correctly identify the client's IP address
+const isServerless = process.env.VERCEL || 
+                     process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                     process.env.LAMBDA_TASK_ROOT;
+if (isServerless) {
+  app.set('trust proxy', true);
+  console.log('Trust proxy enabled for serverless environment');
+}
+
 // Security headers with CSP allowing required external assets
 app.use(helmet());
 app.use(helmet.contentSecurityPolicy({
@@ -41,7 +51,22 @@ app.use(helmet.contentSecurityPolicy({
 app.use(cors());
 app.use(express.json());
 app.use(morgan('combined'));
-const limiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
+
+// Rate limiter with custom keyGenerator for serverless environments
+const limiter = rateLimit({ 
+  windowMs: 60 * 1000, 
+  max: 120,
+  // Custom keyGenerator to handle X-Forwarded-For header properly
+  keyGenerator: (req) => {
+    // If trust proxy is enabled, req.ip will already use X-Forwarded-For
+    // Otherwise, fall back to connection remoteAddress
+    return req.ip || req.connection?.remoteAddress || 'unknown';
+  },
+  // Skip rate limiting for health checks
+  skip: (req) => {
+    return req.path === '/api/health' || req.path === '/health';
+  }
+});
 app.use(limiter);
 
 // Swagger UI - minimal spec
