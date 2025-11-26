@@ -731,194 +731,533 @@ app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').i
 });
 
 // Login OTP resend
-app.post('/api/auth/login/resend-otp', [ body('email').isEmail() ], (req, res) => {
-    console.log('=== OTP RESEND REQUEST ===');
-    console.log('Request body:', req.body);
-    
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email } = req.body;
-    const row = db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
-    if (!row) return res.json({ ok: true });
-    if (!row.email_verified) return res.status(403).json({ ok: false, error: 'email_not_verified' });
-    
-    // Mark all existing OTP tokens as used for this user
-    db.prepare('UPDATE auth_tokens SET used = 1 WHERE user_id = ? AND type = ? AND used = 0').run(row.id, 'login_otp');
-    
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-    db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, code, 'login_otp', expires);
-    
-    try { 
-        sendMailSafe({ to: email, subject: 'Keyco - Giriş Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}. Kod 2 dakika boyunca geçerlidir.` }); 
-    } catch (_) {}
-    
-    console.log('New OTP sent to:', email, 'code:', code);
-    res.json({ ok: true });
+app.post('/api/auth/login/resend-otp', [ body('email').isEmail() ], async (req, res) => {
+    try {
+        console.log('=== OTP RESEND REQUEST ===');
+        console.log('Request body:', req.body);
+        
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.json({ ok: true });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!row) return res.json({ ok: true });
+        if (!row.email_verified) return res.status(403).json({ ok: false, error: 'email_not_verified' });
+        
+        // Mark all existing OTP tokens as used for this user
+        if (db.supabase) {
+            await db.supabase
+                .from('auth_tokens')
+                .update({ used: true })
+                .eq('user_id', row.id)
+                .eq('type', 'login_otp')
+                .eq('used', false);
+        } else {
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE user_id = ? AND type = ? AND used = 0').run(row.id, 'login_otp');
+        }
+        
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('auth_tokens')
+                .insert({ user_id: row.id, token: code, type: 'login_otp', expires_at: expires });
+        } else {
+            await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, code, 'login_otp', expires);
+        }
+        
+        try { 
+            sendMailSafe({ to: email, subject: 'Keyco - Giriş Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}. Kod 2 dakika boyunca geçerlidir.` }); 
+        } catch (_) {}
+        
+        console.log('New OTP sent to:', email, 'code:', code);
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Resend OTP error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Resend verification email
-app.post('/api/auth/verify/resend', [ body('email').isEmail().withMessage('email') ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email } = req.body;
-    const row = db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
-    if (!row) return res.json({ ok: true });
-    if (row.email_verified) return res.json({ ok: true });
+app.post('/api/auth/verify/resend', [ body('email').isEmail().withMessage('email') ], async (req, res) => {
     try {
-        const tokenStr = require('crypto').randomBytes(24).toString('hex');
-        const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
-        db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, tokenStr, 'verify', expires);
-        sendMailSafe({
-            to: email,
-            subject: 'Keyco - E-posta Doğrulama (Yeniden)',
-            text: `Hesabınızı doğrulamak için linke tıklayın: http://localhost:${PORT}/api/auth/verify?token=${tokenStr}`
-        });
-    } catch (_) {}
-    res.json({ ok: true });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.json({ ok: true });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!row) return res.json({ ok: true });
+        if (row.email_verified) return res.json({ ok: true });
+        
+        try {
+            const tokenStr = require('crypto').randomBytes(24).toString('hex');
+            const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
+            
+            if (db.supabase) {
+                await db.supabase
+                    .from('auth_tokens')
+                    .insert({ user_id: row.id, token: tokenStr, type: 'verify', expires_at: expires });
+            } else {
+                await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, tokenStr, 'verify', expires);
+            }
+            
+            sendMailSafe({
+                to: email,
+                subject: 'Keyco - E-posta Doğrulama (Yeniden)',
+                text: `Hesabınızı doğrulamak için linke tıklayın: http://localhost:${PORT}/api/auth/verify?token=${tokenStr}`
+            });
+        } catch (_) {}
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Resend verify error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Email verification
-app.get('/api/auth/verify', (req, res) => {
-    const token = String(req.query.token || '');
-    if (!token) return res.status(400).send('Invalid token');
-    const row = db.prepare('SELECT id, user_id, expires_at, used FROM auth_tokens WHERE token = ? AND type = ?').get(token, 'verify');
-    if (!row) return res.status(400).send('Invalid token');
-    if (row.used) return res.status(400).send('Token used');
-    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).send('Token expired');
-    db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(row.user_id);
-    db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(row.id);
-    res.redirect('/verify.html?ok=1');
+app.get('/api/auth/verify', async (req, res) => {
+    try {
+        const token = String(req.query.token || '');
+        if (!token) return res.status(400).send('Invalid token');
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('auth_tokens')
+                .select('id, user_id, expires_at, used')
+                .eq('token', token)
+                .eq('type', 'verify')
+                .single();
+            if (error || !data) return res.status(400).send('Invalid token');
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, user_id, expires_at, used FROM auth_tokens WHERE token = ? AND type = ?').get(token, 'verify');
+        }
+        
+        if (!row) return res.status(400).send('Invalid token');
+        if (row.used) return res.status(400).send('Token used');
+        if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).send('Token expired');
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('users')
+                .update({ email_verified: true })
+                .eq('id', row.user_id);
+            await db.supabase
+                .from('auth_tokens')
+                .update({ used: true })
+                .eq('id', row.id);
+        } else {
+            await db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(row.user_id);
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(row.id);
+        }
+        
+        res.redirect('/verify.html?ok=1');
+    } catch (error) {
+        console.error('Verify error:', error);
+        res.status(500).send('Internal server error');
+    }
 });
 
 // Password reset request
-app.post('/api/auth/reset/request', [ body('email').isEmail().withMessage('email') ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email } = req.body;
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-    if (!user) return res.json({ ok: true }); // don't leak existence
+app.post('/api/auth/reset/request', [ body('email').isEmail().withMessage('email') ], async (req, res) => {
     try {
-        const tokenStr = require('crypto').randomBytes(24).toString('hex');
-        const expires = new Date(Date.now() + 30*60*1000).toISOString();
-        db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, tokenStr, 'reset', expires);
-        sendMailSafe({
-            to: email,
-            subject: 'Keyco - Şifre Sıfırlama',
-            text: `Şifrenizi sıfırlamak için linke tıklayın: http://localhost:${PORT}/reset?token=${tokenStr}`
-        });
-    } catch (_) {}
-    res.json({ ok: true });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email } = req.body;
+        
+        let user;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.json({ ok: true }); // don't leak existence
+            user = data;
+        } else {
+            user = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!user) return res.json({ ok: true }); // don't leak existence
+        
+        try {
+            const tokenStr = require('crypto').randomBytes(24).toString('hex');
+            const expires = new Date(Date.now() + 30*60*1000).toISOString();
+            
+            if (db.supabase) {
+                await db.supabase
+                    .from('auth_tokens')
+                    .insert({ user_id: user.id, token: tokenStr, type: 'reset', expires_at: expires });
+            } else {
+                await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, tokenStr, 'reset', expires);
+            }
+            
+            sendMailSafe({
+                to: email,
+                subject: 'Keyco - Şifre Sıfırlama',
+                text: `Şifrenizi sıfırlamak için linke tıklayın: http://localhost:${PORT}/reset?token=${tokenStr}`
+            });
+        } catch (_) {}
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Reset request error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Password reset perform
-app.post('/api/auth/reset/perform', [ body('token').isString(), body('password').isLength({ min: 6 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { token, password } = req.body;
-    const row = db.prepare('SELECT id, user_id, expires_at, used FROM auth_tokens WHERE token = ? AND type = ?').get(token, 'reset');
-    if (!row) return res.status(400).json({ ok: false, error: 'invalid_token' });
-    if (row.used) return res.status(400).json({ ok: false, error: 'used_token' });
-    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_token' });
-    const hash = bcrypt.hashSync(password, 10);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.user_id);
-    db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(row.id);
-    res.json({ ok: true });
+app.post('/api/auth/reset/perform', [ body('token').isString(), body('password').isLength({ min: 6 }) ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { token, password } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('auth_tokens')
+                .select('id, user_id, expires_at, used')
+                .eq('token', token)
+                .eq('type', 'reset')
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'invalid_token' });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, user_id, expires_at, used FROM auth_tokens WHERE token = ? AND type = ?').get(token, 'reset');
+        }
+        
+        if (!row) return res.status(400).json({ ok: false, error: 'invalid_token' });
+        if (row.used) return res.status(400).json({ ok: false, error: 'used_token' });
+        if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_token' });
+        
+        const hash = bcrypt.hashSync(password, 10);
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('users')
+                .update({ password_hash: hash })
+                .eq('id', row.user_id);
+            await db.supabase
+                .from('auth_tokens')
+                .update({ used: true })
+                .eq('id', row.id);
+        } else {
+            await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, row.user_id);
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(row.id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Reset perform error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Profile: change password (send code to own email) - requires auth
-app.post('/api/profile/change-password/request', requireAuth, (req, res) => {
-    const user = db.prepare('SELECT id, email FROM users WHERE id = ?').get(req.user.id);
-    if (!user) return res.status(401).json({ ok: false, error: 'unknown_user' });
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-    db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, code, 'change_pwd', expires);
-    try { sendMailSafe({ to: user.email, subject: 'Keyco - Şifre Değiştirme Kodu', text: `Kodunuz: ${code} (10 dk geçerli)` }); } catch (_) {}
-    res.json({ ok: true });
+app.post('/api/profile/change-password/request', requireAuth, async (req, res) => {
+    try {
+        let user;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, email')
+                .eq('id', req.user.id)
+                .single();
+            if (error || !data) return res.status(401).json({ ok: false, error: 'unknown_user' });
+            user = data;
+        } else {
+            user = await db.prepare('SELECT id, email FROM users WHERE id = ?').get(req.user.id);
+        }
+        
+        if (!user) return res.status(401).json({ ok: false, error: 'unknown_user' });
+        
+        const code = String(Math.floor(100000 + Math.random() * 900000));
+        const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('auth_tokens')
+                .insert({ user_id: user.id, token: code, type: 'change_pwd', expires_at: expires });
+        } else {
+            await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, code, 'change_pwd', expires);
+        }
+        
+        try { sendMailSafe({ to: user.email, subject: 'Keyco - Şifre Değiştirme Kodu', text: `Kodunuz: ${code} (10 dk geçerli)` }); } catch (_) {}
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Change password request error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Profile: get user info
-app.get('/api/profile', requireAuth, (req, res) => {
-    const user = db.prepare('SELECT id, name, email, role, email_verified, created_at FROM users WHERE id = ?').get(req.user.id);
-    if (!user) return res.status(404).json({ ok: false, error: 'user_not_found' });
-    res.json({ ok: true, user });
+app.get('/api/profile', requireAuth, async (req, res) => {
+    try {
+        let user;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, name, email, role, email_verified, created_at')
+                .eq('id', req.user.id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'user_not_found' });
+            user = data;
+        } else {
+            user = await db.prepare('SELECT id, name, email, role, email_verified, created_at FROM users WHERE id = ?').get(req.user.id);
+        }
+        
+        if (!user) return res.status(404).json({ ok: false, error: 'user_not_found' });
+        res.json({ ok: true, user });
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Profile: update name
-app.put('/api/profile/name', requireAuth, [ body('name').isLength({ min: 2 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { name } = req.body;
-    db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
-    res.json({ ok: true });
+app.put('/api/profile/name', requireAuth, [ body('name').isLength({ min: 2 }) ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { name } = req.body;
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('users')
+                .update({ name })
+                .eq('id', req.user.id);
+        } else {
+            await db.prepare('UPDATE users SET name = ? WHERE id = ?').run(name, req.user.id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Update name error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Profile: request email change (send 6-digit code to OLD email, store new email pending)
-app.post('/api/profile/email/request', requireAuth, [ body('email').isEmail() ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email: newEmail } = req.body;
-    // Save pending change (overwrite if exists)
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 30*60*1000).toISOString(); // 30 minutes
-    const exists = db.prepare('SELECT id FROM pending_email_changes WHERE user_id = ?').get(req.user.id);
-    if (exists) {
-        db.prepare('UPDATE pending_email_changes SET new_email=?, code=?, expires_at=?, used=0 WHERE user_id=?').run(newEmail, code, expires, req.user.id);
-    } else {
-        db.prepare('INSERT INTO pending_email_changes (user_id, new_email, code, expires_at) VALUES (?, ?, ?, ?)').run(req.user.id, newEmail, code, expires);
-    }
-    // Send code to OLD email (current account email)
+app.post('/api/profile/email/request', requireAuth, [ body('email').isEmail() ], async (req, res) => {
     try {
-        const user = db.prepare('SELECT email FROM users WHERE id = ?').get(req.user.id);
-        if (user?.email) {
-            sendMailSafe({ to: user.email, subject: 'Keyco - E‑posta Değişiklik Kodu', text: `E‑posta değişikliği için doğrulama kodunuz: ${code}. Kod 30 dakika geçerlidir.` });
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email: newEmail } = req.body;
+        
+        // Save pending change (overwrite if exists)
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 30*60*1000).toISOString(); // 30 minutes
+        
+        let exists;
+        if (db.supabase) {
+            const { data } = await db.supabase
+                .from('pending_email_changes')
+                .select('id')
+                .eq('user_id', req.user.id)
+                .single();
+            exists = data;
+            
+            if (exists) {
+                await db.supabase
+                    .from('pending_email_changes')
+                    .update({ new_email: newEmail, code, expires_at: expires, used: false })
+                    .eq('user_id', req.user.id);
+            } else {
+                await db.supabase
+                    .from('pending_email_changes')
+                    .insert({ user_id: req.user.id, new_email: newEmail, code, expires_at: expires });
+            }
+        } else {
+            exists = await db.prepare('SELECT id FROM pending_email_changes WHERE user_id = ?').get(req.user.id);
+            if (exists) {
+                await db.prepare('UPDATE pending_email_changes SET new_email=?, code=?, expires_at=?, used=0 WHERE user_id=?').run(newEmail, code, expires, req.user.id);
+            } else {
+                await db.prepare('INSERT INTO pending_email_changes (user_id, new_email, code, expires_at) VALUES (?, ?, ?, ?)').run(req.user.id, newEmail, code, expires);
+            }
         }
-    } catch {}
-    if ((process.env.NODE_ENV || 'development') !== 'production') {
-        console.log('DEBUG EMAIL CHANGE CODE:', req.user.email, code, '-> new:', newEmail);
+        
+        // Send code to OLD email (current account email)
+        try {
+            let user;
+            if (db.supabase) {
+                const { data } = await db.supabase
+                    .from('users')
+                    .select('email')
+                    .eq('id', req.user.id)
+                    .single();
+                user = data;
+            } else {
+                user = await db.prepare('SELECT email FROM users WHERE id = ?').get(req.user.id);
+            }
+            
+            if (user?.email) {
+                sendMailSafe({ to: user.email, subject: 'Keyco - E‑posta Değişiklik Kodu', text: `E‑posta değişikliği için doğrulama kodunuz: ${code}. Kod 30 dakika geçerlidir.` });
+            }
+        } catch {}
+        if ((process.env.NODE_ENV || 'development') !== 'production') {
+            console.log('DEBUG EMAIL CHANGE CODE:', req.user.email, code, '-> new:', newEmail);
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Email change request error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    res.json({ ok: true });
 });
 
 // Profile: confirm email change with code
-app.post('/api/profile/email/confirm', requireAuth, [ body('code').isLength({ min: 6, max: 6 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { code } = req.body;
-    const row = db.prepare('SELECT id, new_email, expires_at, used FROM pending_email_changes WHERE user_id = ?').get(req.user.id);
-    if (!row) return res.status(400).json({ ok: false, error: 'no_request' });
-    if (row.used) return res.status(400).json({ ok: false, error: 'used_code' });
-    if (String(row.code) !== String(code)) return res.status(400).json({ ok: false, error: 'invalid_code' });
-    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
+app.post('/api/profile/email/confirm', requireAuth, [ body('code').isLength({ min: 6, max: 6 }) ], async (req, res) => {
     try {
-        db.prepare('UPDATE users SET email = ? WHERE id = ?').run(row.new_email, req.user.id);
-        db.prepare('UPDATE pending_email_changes SET used = 1 WHERE id = ?').run(row.id);
-    } catch (e) {
-        if (String(e.message||'').includes('UNIQUE')) return res.status(409).json({ ok: false, error: 'email_exists' });
-        throw e;
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { code } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('pending_email_changes')
+                .select('id, new_email, code, expires_at, used')
+                .eq('user_id', req.user.id)
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'no_request' });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, new_email, expires_at, used FROM pending_email_changes WHERE user_id = ?').get(req.user.id);
+        }
+        
+        if (!row) return res.status(400).json({ ok: false, error: 'no_request' });
+        if (row.used) return res.status(400).json({ ok: false, error: 'used_code' });
+        if (String(row.code) !== String(code)) return res.status(400).json({ ok: false, error: 'invalid_code' });
+        if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
+        
+        try {
+            if (db.supabase) {
+                const { error: updateError } = await db.supabase
+                    .from('users')
+                    .update({ email: row.new_email })
+                    .eq('id', req.user.id);
+                if (updateError) {
+                    if (updateError.code === '23505') return res.status(409).json({ ok: false, error: 'email_exists' });
+                    throw updateError;
+                }
+                await db.supabase
+                    .from('pending_email_changes')
+                    .update({ used: true })
+                    .eq('id', row.id);
+            } else {
+                await db.prepare('UPDATE users SET email = ? WHERE id = ?').run(row.new_email, req.user.id);
+                await db.prepare('UPDATE pending_email_changes SET used = 1 WHERE id = ?').run(row.id);
+            }
+        } catch (e) {
+            if (String(e.message||'').includes('UNIQUE') || String(e.message||'').includes('23505')) return res.status(409).json({ ok: false, error: 'email_exists' });
+            throw e;
+        }
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Email confirm error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    res.json({ ok: true });
 });
-app.post('/api/profile/change-password/perform', requireAuth, [ body('code').isLength({ min: 6, max: 6 }), body('newPassword').isLength({ min: 6 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { code, newPassword } = req.body;
-    const tokenRow = db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(req.user.id, 'change_pwd', String(code));
-    if (!tokenRow) return res.status(400).json({ ok: false, error: 'invalid_code' });
-    if (tokenRow.used) return res.status(400).json({ ok: false, error: 'used_code' });
-    if (new Date(tokenRow.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
-    const hash = bcrypt.hashSync(newPassword, 10);
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
-    db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
-    res.json({ ok: true });
+
+app.post('/api/profile/change-password/perform', requireAuth, [ body('code').isLength({ min: 6, max: 6 }), body('newPassword').isLength({ min: 6 }) ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { code, newPassword } = req.body;
+        
+        let tokenRow;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('auth_tokens')
+                .select('id, expires_at, used')
+                .eq('user_id', req.user.id)
+                .eq('type', 'change_pwd')
+                .eq('token', String(code))
+                .order('id', { ascending: false })
+                .limit(1)
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'invalid_code' });
+            tokenRow = data;
+        } else {
+            tokenRow = await db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(req.user.id, 'change_pwd', String(code));
+        }
+        
+        if (!tokenRow) return res.status(400).json({ ok: false, error: 'invalid_code' });
+        if (tokenRow.used) return res.status(400).json({ ok: false, error: 'used_code' });
+        if (new Date(tokenRow.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
+        
+        const hash = bcrypt.hashSync(newPassword, 10);
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('users')
+                .update({ password_hash: hash })
+                .eq('id', req.user.id);
+            await db.supabase
+                .from('auth_tokens')
+                .update({ used: true })
+                .eq('id', tokenRow.id);
+        } else {
+            await db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user.id);
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Change password perform error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Get product categories and platforms
-app.get('/api/categories', (req, res) => {
+app.get('/api/categories', async (req, res) => {
     try {
-        const categories = db.prepare('SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category').all();
-        const platforms = db.prepare('SELECT DISTINCT platform FROM products WHERE platform IS NOT NULL ORDER BY platform').all();
-        const packageLevels = db.prepare('SELECT DISTINCT package_level FROM products WHERE package_level IS NOT NULL ORDER BY package_level').all();
+        let categories, platforms, packageLevels;
+        
+        if (db.supabase) {
+            const [categoriesRes, platformsRes, packageLevelsRes] = await Promise.all([
+                db.supabase.from('products').select('category').not('category', 'is', null),
+                db.supabase.from('products').select('platform').not('platform', 'is', null),
+                db.supabase.from('products').select('package_level').not('package_level', 'is', null)
+            ]);
+            
+            const uniqueCategories = [...new Set((categoriesRes.data || []).map(c => c.category).filter(Boolean))].sort();
+            const uniquePlatforms = [...new Set((platformsRes.data || []).map(p => p.platform).filter(Boolean))].sort();
+            const uniquePackageLevels = [...new Set((packageLevelsRes.data || []).map(p => p.package_level).filter(Boolean))].sort();
+            
+            categories = uniqueCategories.map(c => ({ category: c }));
+            platforms = uniquePlatforms.map(p => ({ platform: p }));
+            packageLevels = uniquePackageLevels.map(p => ({ package_level: p }));
+        } else {
+            categories = await db.prepare('SELECT DISTINCT category FROM products WHERE category IS NOT NULL ORDER BY category').all();
+            platforms = await db.prepare('SELECT DISTINCT platform FROM products WHERE platform IS NOT NULL ORDER BY platform').all();
+            packageLevels = await db.prepare('SELECT DISTINCT package_level FROM products WHERE package_level IS NOT NULL ORDER BY package_level').all();
+        }
         
         res.json({ 
             ok: true, 
@@ -1110,7 +1449,7 @@ app.get('/api/products', async (req, res) => {
                 ${orderClause}
             `;
             
-            const rows = db.prepare(query).all(...params);
+            const rows = await db.prepare(query).all(...params);
             res.json({ ok: true, items: rows, total: rows.length });
         }
     } catch (error) {
