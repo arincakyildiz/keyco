@@ -6264,51 +6264,80 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       console.log('🎮 Valorant rastgele VP özel görünümü yükleniyor...');
       console.log('📦 Mevcut ürünler:', items.length);
       
-      // Rastgele VP paketlerini direkt ID ile bul
-      const vpPackets = items.filter(p => [25, 26, 27].includes(p.id));
-      console.log('🎯 VP paketleri (ID 25,26,27):', vpPackets.length, 'adet');
+      // Önce "random" package_level'ı veya slug'ında "random"/"rastgele" geçen özel paketleri bul
+      const randomPackets = items.filter(p => {
+        const slug = (p.slug || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        const packageLevel = (p.package_level || '').toLowerCase();
+        const isValorant = (p.category || '').toLowerCase() === 'valorant' || (p.platform || '').toLowerCase() === 'valorant';
+        return isValorant && (
+          packageLevel === 'random' || 
+          slug.includes('random') || slug.includes('rastgele') ||
+          name.includes('rastgele') || name.includes('random')
+        );
+      });
       
-      if (vpPackets.length > 0) {
-        // Seviyeye göre sırala: low, medium, high
-        vpPackets.sort((a, b) => {
-          const order = { low: 1, medium: 2, high: 3 };
-          return (order[a.package_level] || 99) - (order[b.package_level] || 99);
-        });
-        
-        // Grid'i temizle ve sadece VP paketlerini göster
+      console.log('🎲 Rastgele VP paketleri (özel):', randomPackets.length, 'adet');
+      
+      if (randomPackets.length >= 3) {
+        // Eğer 3 veya daha fazla random paket varsa, ilk 3'ünü göster
+        const selectedPackets = randomPackets.slice(0, 3);
         grid.innerHTML = '';
-        
-        // Normal grid düzenini kullan (products-grid CSS'i ile)
-        vpPackets.forEach((p) => {
-          console.log('🎮 VP Paketi kartı oluşturuluyor:', p.name, 'Fiyat:', (p.price/100) + '₺');
+        selectedPackets.forEach((p) => {
+          console.log('🎮 Rastgele VP Paketi:', p.name, 'Fiyat:', (p.price/100) + '₺');
           const card = createProductCard(p);
           grid.appendChild(card);
         });
+        console.log('✅ Rastgele VP kartları eklendi (özel paketler)');
+        return;
+      }
+      
+      // Fallback: package_level'a göre bul (low, medium, high)
+      const fallbackPackets = items.filter(p => 
+        (p.category||'').toLowerCase() === 'valorant' && 
+        ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
+      );
+      console.log('🔄 Tüm VP paketleri:', fallbackPackets.length, 'adet');
+      
+      if (fallbackPackets.length > 0) {
+        // Her seviyeden bir tane seç (low, medium, high)
+        const selectedPackets = [];
+        const levels = ['low', 'medium', 'high'];
         
-        console.log('✅ Rastgele VP kartları eklendi');
-        return; // Fonksiyonu bitir, sadece 3 paket gösterilsin
-      } else {
-        console.log('❌ VP paketleri bulunamadı (ID: 25, 26, 27)');
-        // Fallback olarak package_level ile ara
-        const fallbackPackets = items.filter(p => 
-          (p.category||'').toLowerCase() === 'valorant' && 
-          ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
-        );
-        console.log('🔄 Fallback paketler:', fallbackPackets.length, 'adet');
+        levels.forEach(level => {
+          const levelPackets = fallbackPackets.filter(p => (p.package_level||'').toLowerCase() === level);
+          if (levelPackets.length > 0) {
+            // Fiyata göre sırala ve en ucuz olanı seç
+            levelPackets.sort((a, b) => (a.price || 0) - (b.price || 0));
+            selectedPackets.push(levelPackets[0]);
+          }
+        });
         
-        if (fallbackPackets.length > 0) {
-          // Grid'i temizle ve sadece fallback paketlerini göster
+        console.log('🎯 Seçilen VP paketleri:', selectedPackets.length, 'adet');
+        
+        if (selectedPackets.length > 0) {
+          // Seviyeye göre sırala: low, medium, high
+          selectedPackets.sort((a, b) => {
+            const order = { low: 1, medium: 2, high: 3 };
+            return (order[a.package_level] || 99) - (order[b.package_level] || 99);
+          });
+          
+          // Grid'i temizle ve sadece seçilen paketleri göster
           grid.innerHTML = '';
           
           // Normal grid düzenini kullan (products-grid CSS'i ile)
-          fallbackPackets.forEach(p => {
+          selectedPackets.forEach((p) => {
+            console.log('🎮 VP Paketi kartı oluşturuluyor:', p.name, 'Fiyat:', (p.price/100) + '₺', 'Seviye:', p.package_level);
             const card = createProductCard(p);
             grid.appendChild(card);
           });
           
-          return; // Fonksiyonu bitir
+          console.log('✅ Rastgele VP kartları eklendi');
+          return; // Fonksiyonu bitir, sadece 3 paket gösterilsin
         }
       }
+      
+      console.log('❌ VP paketleri bulunamadı');
     }
 
     // LoL Rastgele RP özel görünümü (Valorant VP gibi)
@@ -6317,51 +6346,80 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       console.log('🎮 LoL rastgele RP özel görünümü yükleniyor...');
       console.log('📦 Mevcut ürünler:', items.length);
       
-      // Rastgele RP paketlerini direkt ID ile bul (36, 37, 38)
-      const rpPackets = items.filter(p => [36, 37, 38].includes(p.id));
-      console.log('🎯 RP paketleri (ID 36,37,38):', rpPackets.length, 'adet');
+      // Önce "random" package_level'ı veya slug'ında "random"/"rastgele" geçen özel paketleri bul
+      const randomPackets = items.filter(p => {
+        const slug = (p.slug || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        const packageLevel = (p.package_level || '').toLowerCase();
+        const isLol = (p.category || '').toLowerCase() === 'lol' || (p.platform || '').toLowerCase() === 'lol';
+        return isLol && (
+          packageLevel === 'random' || 
+          slug.includes('random') || slug.includes('rastgele') ||
+          name.includes('rastgele') || name.includes('random')
+        );
+      });
       
-      if (rpPackets.length > 0) {
-        // Seviyeye göre sırala: low, medium, high
-        rpPackets.sort((a, b) => {
-          const order = { low: 1, medium: 2, high: 3 };
-          return (order[a.package_level] || 99) - (order[b.package_level] || 99);
-        });
-        
-        // Grid'i temizle ve sadece RP paketlerini göster
+      console.log('🎲 Rastgele RP paketleri (özel):', randomPackets.length, 'adet');
+      
+      if (randomPackets.length >= 3) {
+        // Eğer 3 veya daha fazla random paket varsa, ilk 3'ünü göster
+        const selectedPackets = randomPackets.slice(0, 3);
         grid.innerHTML = '';
-        
-        // Normal grid düzenini kullan (products-grid CSS'i ile)
-        rpPackets.forEach((p) => {
-          console.log('🎮 RP Paketi kartı oluşturuluyor:', p.name, 'Fiyat:', (p.price/100) + '₺');
+        selectedPackets.forEach((p) => {
+          console.log('🎮 Rastgele RP Paketi:', p.name, 'Fiyat:', (p.price/100) + '₺');
           const card = createProductCard(p);
           grid.appendChild(card);
         });
+        console.log('✅ Rastgele RP kartları eklendi (özel paketler)');
+        return;
+      }
+      
+      // Fallback: package_level'a göre bul (low, medium, high)
+      const fallbackPackets = items.filter(p => 
+        (p.category||'').toLowerCase() === 'lol' && 
+        ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
+      );
+      console.log('🔄 Tüm RP paketleri:', fallbackPackets.length, 'adet');
+      
+      if (fallbackPackets.length > 0) {
+        // Her seviyeden bir tane seç (low, medium, high)
+        const selectedPackets = [];
+        const levels = ['low', 'medium', 'high'];
         
-        console.log('✅ Rastgele RP kartları eklendi');
-        return; // Fonksiyonu bitir, sadece 3 paket gösterilsin
-      } else {
-        console.log('❌ RP paketleri bulunamadı (ID: 36, 37, 38)');
-        // Fallback olarak package_level ile ara
-        const fallbackPackets = items.filter(p => 
-          (p.category||'').toLowerCase() === 'lol' && 
-          ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
-        );
-        console.log('🔄 Fallback RP paketler:', fallbackPackets.length, 'adet');
+        levels.forEach(level => {
+          const levelPackets = fallbackPackets.filter(p => (p.package_level||'').toLowerCase() === level);
+          if (levelPackets.length > 0) {
+            // Fiyata göre sırala ve en ucuz olanı seç
+            levelPackets.sort((a, b) => (a.price || 0) - (b.price || 0));
+            selectedPackets.push(levelPackets[0]);
+          }
+        });
         
-        if (fallbackPackets.length > 0) {
-          // Grid'i temizle ve sadece fallback paketlerini göster
+        console.log('🎯 Seçilen RP paketleri:', selectedPackets.length, 'adet');
+        
+        if (selectedPackets.length > 0) {
+          // Seviyeye göre sırala: low, medium, high
+          selectedPackets.sort((a, b) => {
+            const order = { low: 1, medium: 2, high: 3 };
+            return (order[a.package_level] || 99) - (order[b.package_level] || 99);
+          });
+          
+          // Grid'i temizle ve sadece seçilen paketleri göster
           grid.innerHTML = '';
           
           // Normal grid düzenini kullan (products-grid CSS'i ile)
-          fallbackPackets.forEach(p => {
+          selectedPackets.forEach((p) => {
+            console.log('🎮 RP Paketi kartı oluşturuluyor:', p.name, 'Fiyat:', (p.price/100) + '₺', 'Seviye:', p.package_level);
             const card = createProductCard(p);
             grid.appendChild(card);
           });
           
-          return; // Fonksiyonu bitir
+          console.log('✅ Rastgele RP kartları eklendi');
+          return; // Fonksiyonu bitir, sadece 3 paket gösterilsin
         }
       }
+      
+      console.log('❌ RP paketleri bulunamadı');
     }
 
     // Steam Rastgele Oyun özel görünümü (Valorant VP ve LoL RP gibi)
