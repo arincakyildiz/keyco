@@ -1341,12 +1341,13 @@ app.get('/api/products', async (req, res) => {
         if (db.supabase) {
             let query = db.supabase
                 .from('products')
-                .select('id, name, slug, price, currency, category, platform, package_level, description, description_en, discount, image_url, created_at');
+                .select('id, name, slug, price, currency, category, platform, package_level, description, discount, image_url, created_at');
             
             // Search filter
             if (search && search.trim()) {
                 const searchTerm = `%${search.trim()}%`;
-                query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
+                // Note: description_en column doesn't exist in Supabase, removed from search
+                query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},slug.ilike.${searchTerm}`);
             }
             
             // Category filter - frontend sends category as 'valorant', 'lol', 'steam'
@@ -2669,7 +2670,6 @@ app.get('/api/favorites', requireAuth, async (req, res) => {
                         name,
                         slug,
                         description,
-                        description_en,
                         price,
                         currency,
                         category,
@@ -2689,7 +2689,6 @@ app.get('/api/favorites', requireAuth, async (req, res) => {
                 name: fav.products.name,
                 slug: fav.products.slug,
                 description: fav.products.description,
-                description_en: fav.products.description_en,
                 price: fav.products.price,
                 currency: fav.products.currency,
                 category: fav.products.category,
@@ -2821,7 +2820,6 @@ app.get('/api/cart', requireAuth, async (req, res) => {
                         name,
                         slug,
                         description,
-                        description_en,
                         price,
                         currency,
                         category,
@@ -2841,7 +2839,6 @@ app.get('/api/cart', requireAuth, async (req, res) => {
                 name: cart.products.name,
                 slug: cart.products.slug,
                 description: cart.products.description,
-                description_en: cart.products.description_en,
                 price: cart.products.price,
                 currency: cart.products.currency,
                 category: cart.products.category,
