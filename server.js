@@ -1349,9 +1349,10 @@ app.get('/api/products', async (req, res) => {
                 query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
             }
             
-            // Category filter
+            // Category filter (case-insensitive)
             if (category && category !== 'all') {
-                query = query.eq('category', category);
+                // Use ilike for case-insensitive matching
+                query = query.ilike('category', category);
             }
             
             // Platform filter
