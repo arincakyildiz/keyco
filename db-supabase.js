@@ -304,7 +304,7 @@ async function seedData() {
         { name: 'League of Legends RP 5000', slug: 'lol-rp-5000', description: '5000 League of Legends RP', price: 100000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'high', discount: 0, image_url: 'rp.png' },
         
         // LoL Rastgele RP Paketleri (3 ayrı paket: düşük, orta, yüksek)
-        { name: 'LoL Rastgele RP (Düşük Paket)', slug: 'lol-rp-random-dusuk', description: 'LoL Rastgele RP - Düşük Paket', price: 20000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp.png' },
+        { name: 'LoL Rastgele RP (Düşük Paket)', slug: 'lol-rp-random-dusuk', description: 'LoL Rastgele RP - Düşük Paket', price: 20000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rpex.png' },
         { name: 'LoL Rastgele RP (Orta Paket)', slug: 'lol-rp-random-orta', description: 'LoL Rastgele RP - Orta Paket', price: 45000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp2.png' },
         { name: 'LoL Rastgele RP (Yüksek Paket)', slug: 'lol-rp-random-yuksek', description: 'LoL Rastgele RP - Yüksek Paket', price: 80000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp3.png' },
         
@@ -316,7 +316,12 @@ async function seedData() {
         { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077', description: 'Cyberpunk 2077 PC Oyunu', price: 59900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 10, image_url: 'st.png' },
         { name: 'Grand Theft Auto V', slug: 'gta-v', description: 'Grand Theft Auto V PC Oyunu', price: 29900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 5, image_url: 'st.png' },
         { name: 'Elden Ring', slug: 'elden-ring', description: 'Elden Ring PC Oyunu', price: 69900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
-        { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' }
+        { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        
+        // Steam Rastgele Oyun Paketleri (3 ayrı paket: düşük, orta, yüksek)
+        { name: 'Steam Rastgele Oyun (Düşük Paket)', slug: 'steam-random-dusuk', description: 'Steam Rastgele Oyun - Düşük Paket', price: 25000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Rastgele Oyun (Orta Paket)', slug: 'steam-random-orta', description: 'Steam Rastgele Oyun - Orta Paket', price: 50000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st1.png' },
+        { name: 'Steam Rastgele Oyun (Yüksek Paket)', slug: 'steam-random-yuksek', description: 'Steam Rastgele Oyun - Yüksek Paket', price: 100000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'random', discount: 0, image_url: 'st2.png' }
       ]);
       console.log('✅ Products seeded');
     }
