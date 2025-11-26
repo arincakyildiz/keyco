@@ -2193,16 +2193,23 @@ app.get('/api/admin/orders/:id/payments', requireAuth, requireAdmin, async (req,
     }
 });
 // Admin: list contacts
-app.get('/api/admin/contacts', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/contacts', requireAuth, requireAdmin, async (req, res) => {
     try {
-        // Check if contacts table has any data
-        const count = db.prepare('SELECT COUNT(*) as count FROM contacts').get();
-        
-        if (count.count === 0) {
-            return res.json({ ok: true, items: [], total: 0 });
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('contacts')
+                .select('id, name, email, subject, message, created_at')
+                .order('id', { ascending: false });
+            if (error) throw error;
+            rows = data || [];
+        } else {
+            const count = await db.prepare('SELECT COUNT(*) as count FROM contacts').get();
+            if (count.count === 0) {
+                return res.json({ ok: true, items: [], total: 0 });
+            }
+            rows = await db.prepare('SELECT id, name, email, subject, message, created_at FROM contacts ORDER BY id DESC').all();
         }
-        
-        const rows = db.prepare('SELECT id, name, email, subject, message, created_at FROM contacts ORDER BY id DESC').all();
         res.json({ ok: true, items: rows, total: rows.length });
     } catch (error) {
         console.error('Contacts fetch error:', error);
@@ -2210,13 +2217,40 @@ app.get('/api/admin/contacts', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.delete('/api/admin/contacts/:id', requireAuth, requireAdmin, (req, res) => {
-    const id = Number(req.params.id);
-    const exists = db.prepare('SELECT id FROM contacts WHERE id = ?').get(id);
-    console.log('Admin delete contact attempt', { id, exists: !!exists });
-    if (!exists) return res.status(404).json({ ok: false, error: 'not_found' });
-    db.prepare('DELETE FROM contacts WHERE id = ?').run(id);
-    res.json({ ok: true });
+app.delete('/api/admin/contacts/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        let exists;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('contacts')
+                .select('id')
+                .eq('id', id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            exists = data;
+        } else {
+            exists = await db.prepare('SELECT id FROM contacts WHERE id = ?').get(id);
+        }
+        
+        console.log('Admin delete contact attempt', { id, exists: !!exists });
+        if (!exists) return res.status(404).json({ ok: false, error: 'not_found' });
+        
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('contacts')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM contacts WHERE id = ?').run(id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Delete contact error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Admin: list all orders
@@ -3369,7 +3403,7 @@ app.post('/api/notifications/read-all', requireAuth, (req, res) => {
 });
 
 // Admin: Send notification to users
-app.post('/api/admin/notifications', requireAuth, requireAdmin, (req, res) => {
+app.post('/api/admin/notifications', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { title, message, user_ids, type } = req.body;
         
@@ -3379,27 +3413,61 @@ app.post('/api/admin/notifications', requireAuth, requireAdmin, (req, res) => {
         
         // If no user_ids provided, send to all users
         let targetUsers = [];
-        if (user_ids && user_ids.length > 0) {
-            targetUsers = db.prepare(`
-                SELECT id FROM users WHERE id IN (${user_ids.map(() => '?').join(',')})
-            `).all(...user_ids);
+        if (db.supabase) {
+            if (user_ids && user_ids.length > 0) {
+                const { data, error } = await db.supabase
+                    .from('users')
+                    .select('id')
+                    .in('id', user_ids);
+                if (error) throw error;
+                targetUsers = data || [];
+            } else {
+                const { data, error } = await db.supabase
+                    .from('users')
+                    .select('id');
+                if (error) throw error;
+                targetUsers = data || [];
+            }
         } else {
-            targetUsers = db.prepare('SELECT id FROM users').all();
+            if (user_ids && user_ids.length > 0) {
+                targetUsers = await db.prepare(`
+                    SELECT id FROM users WHERE id IN (${user_ids.map(() => '?').join(',')})
+                `).all(...user_ids);
+            } else {
+                targetUsers = await db.prepare('SELECT id FROM users').all();
+            }
         }
         
         // Insert notifications for each user
-        const insertNotification = db.prepare(`
-            INSERT INTO notifications (user_id, type, title, message, created_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
-        `);
-        
-        const transaction = db.transaction(() => {
-            for (const user of targetUsers) {
-                insertNotification.run(user.id, type || 'admin', title, message);
+        if (db.supabase) {
+            const notifications = targetUsers.map(user => ({
+                user_id: user.id,
+                type: type || 'admin',
+                title,
+                message,
+                created_at: new Date().toISOString()
+            }));
+            
+            if (notifications.length > 0) {
+                const { error } = await db.supabase
+                    .from('notifications')
+                    .insert(notifications);
+                if (error) throw error;
             }
-        });
-        
-        transaction();
+        } else {
+            const insertNotification = db.prepare(`
+                INSERT INTO notifications (user_id, type, title, message, created_at)
+                VALUES (?, ?, ?, ?, datetime('now'))
+            `);
+            
+            const transaction = db.transaction(() => {
+                for (const user of targetUsers) {
+                    insertNotification.run(user.id, type || 'admin', title, message);
+                }
+            });
+            
+            transaction();
+        }
         
         res.json({ 
             ok: true, 
@@ -3413,22 +3481,43 @@ app.post('/api/admin/notifications', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: Get all notifications
-app.get('/api/admin/notifications', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/notifications', requireAuth, requireAdmin, async (req, res) => {
     try {
-        // Check if notifications table has any data
-        const count = db.prepare('SELECT COUNT(*) as count FROM notifications').get();
-        
-        if (count.count === 0) {
-            return res.json({ ok: true, notifications: [] });
+        let notifications;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('notifications')
+                .select(`
+                    *,
+                    users (
+                        name,
+                        email
+                    )
+                `)
+                .order('created_at', { ascending: false })
+                .limit(100);
+            
+            if (error) throw error;
+            
+            notifications = (data || []).map(n => ({
+                ...n,
+                user_name: n.users?.name || null,
+                user_email: n.users?.email || null
+            }));
+        } else {
+            const count = await db.prepare('SELECT COUNT(*) as count FROM notifications').get();
+            if (count.count === 0) {
+                return res.json({ ok: true, notifications: [] });
+            }
+            
+            notifications = await db.prepare(`
+                SELECT n.*, u.name as user_name, u.email as user_email
+                FROM notifications n
+                LEFT JOIN users u ON u.id = n.user_id
+                ORDER BY n.created_at DESC
+                LIMIT 100
+            `).all();
         }
-        
-        const notifications = db.prepare(`
-            SELECT n.*, u.name as user_name, u.email as user_email
-            FROM notifications n
-            LEFT JOIN users u ON u.id = n.user_id
-            ORDER BY n.created_at DESC
-            LIMIT 100
-        `).all();
         
         res.json({ ok: true, notifications });
         
@@ -3439,18 +3528,56 @@ app.get('/api/admin/notifications', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: delete user (protect admins and self)
-app.delete('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
-    const id = Number(req.params.id);
-    if (req.user.id === id) return res.status(400).json({ ok: false, error: 'cannot_delete_self' });
-    const u = db.prepare('SELECT id, role FROM users WHERE id = ?').get(id);
-    if (!u) return res.status(404).json({ ok: false, error: 'not_found' });
-    if (u.role === 'admin') return res.status(403).json({ ok: false, error: 'cannot_delete_admin' });
-    // optional: block if has orders
-    const hasOrder = db.prepare('SELECT 1 FROM orders WHERE user_id = ? LIMIT 1').get(id);
-    if (hasOrder) return res.status(409).json({ ok: false, error: 'has_orders' });
-    db.prepare('DELETE FROM auth_tokens WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
-    res.json({ ok: true });
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (req.user.id === id) return res.status(400).json({ ok: false, error: 'cannot_delete_self' });
+        
+        let u;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, role')
+                .eq('id', id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            u = data;
+        } else {
+            u = await db.prepare('SELECT id, role FROM users WHERE id = ?').get(id);
+        }
+        
+        if (!u) return res.status(404).json({ ok: false, error: 'not_found' });
+        if (u.role === 'admin') return res.status(403).json({ ok: false, error: 'cannot_delete_admin' });
+        
+        // optional: block if has orders
+        let hasOrder;
+        if (db.supabase) {
+            const { data } = await db.supabase
+                .from('orders')
+                .select('id')
+                .eq('user_id', id)
+                .limit(1)
+                .single();
+            hasOrder = data;
+        } else {
+            hasOrder = await db.prepare('SELECT 1 FROM orders WHERE user_id = ? LIMIT 1').get(id);
+        }
+        
+        if (hasOrder) return res.status(409).json({ ok: false, error: 'has_orders' });
+        
+        if (db.supabase) {
+            await db.supabase.from('auth_tokens').delete().eq('user_id', id);
+            await db.supabase.from('users').delete().eq('id', id);
+        } else {
+            await db.prepare('DELETE FROM auth_tokens WHERE user_id = ?').run(id);
+            await db.prepare('DELETE FROM users WHERE id = ?').run(id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Delete user error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // FAQs
@@ -3592,58 +3719,106 @@ app.get('/api/admin/support/ratings/summary', requireAuth, requireAdmin, async (
     }
 });
 
-app.get('/api/admin/support/ratings', requireAuth, requireAdmin, (req, res) => {
-    const { rating, date_from, date_to, has_comment, search } = req.query;
-    
-    let whereClause = 'WHERE 1=1';
-    let params = [];
-    let paramIndex = 1;
-    
-    // Rating filter
-    if (rating && !isNaN(rating)) {
-        whereClause += ` AND r.rating = ?`;
-        params.push(parseInt(rating));
-        paramIndex++;
-    }
-    
-    // Date range filter
-    if (date_from) {
-        whereClause += ` AND DATE(r.created_at) >= ?`;
-        params.push(date_from);
-        paramIndex++;
-    }
-    
-    if (date_to) {
-        whereClause += ` AND DATE(r.created_at) <= ?`;
-        params.push(date_to);
-        paramIndex++;
-    }
-    
-    // Comment filter
-    if (has_comment === 'true') {
-        whereClause += ` AND r.comment IS NOT NULL AND r.comment != ''`;
-    } else if (has_comment === 'false') {
-        whereClause += ` AND (r.comment IS NULL OR r.comment = '')`;
-    }
-    
-    // Search filter (comment or user email)
-    if (search && search.trim()) {
-        whereClause += ` AND (r.comment LIKE ? OR u.email LIKE ?)`;
-        const searchTerm = `%${search.trim()}%`;
-        params.push(searchTerm, searchTerm);
-        paramIndex++;
-    }
-    
-    const query = `
-        SELECT r.id, r.rating, r.comment, r.created_at, u.email AS user_email
-        FROM support_ratings r
-        LEFT JOIN users u ON u.id = r.user_id
-        ${whereClause}
-        ORDER BY r.id DESC
-    `;
-    
+app.get('/api/admin/support/ratings', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const rows = db.prepare(query).all(...params);
+        const { rating, date_from, date_to, has_comment, search } = req.query;
+        
+        let rows;
+        if (db.supabase) {
+            let query = db.supabase
+                .from('support_ratings')
+                .select(`
+                    id,
+                    rating,
+                    comment,
+                    created_at,
+                    users (
+                        email
+                    )
+                `);
+            
+            if (rating && !isNaN(rating)) {
+                query = query.eq('rating', parseInt(rating));
+            }
+            
+            if (date_from) {
+                query = query.gte('created_at', date_from);
+            }
+            if (date_to) {
+                query = query.lte('created_at', date_to);
+            }
+            
+            if (has_comment === 'true') {
+                query = query.not('comment', 'is', null).neq('comment', '');
+            } else if (has_comment === 'false') {
+                query = query.or('comment.is.null,comment.eq.');
+            }
+            
+            query = query.order('id', { ascending: false });
+            
+            const { data, error } = await query;
+            if (error) throw error;
+            
+            let filteredData = data || [];
+            
+            // Search filter (comment or user email) - manual filter for Supabase
+            if (search && search.trim()) {
+                const searchTerm = search.trim().toLowerCase();
+                filteredData = filteredData.filter(r => 
+                    (r.comment && r.comment.toLowerCase().includes(searchTerm)) ||
+                    (r.users?.email && r.users.email.toLowerCase().includes(searchTerm))
+                );
+            }
+            
+            rows = filteredData.map(r => ({
+                id: r.id,
+                rating: r.rating,
+                comment: r.comment,
+                created_at: r.created_at,
+                user_email: r.users?.email || null
+            }));
+        } else {
+            let whereClause = 'WHERE 1=1';
+            let params = [];
+            
+            if (rating && !isNaN(rating)) {
+                whereClause += ` AND r.rating = ?`;
+                params.push(parseInt(rating));
+            }
+            
+            if (date_from) {
+                whereClause += ` AND DATE(r.created_at) >= ?`;
+                params.push(date_from);
+            }
+            
+            if (date_to) {
+                whereClause += ` AND DATE(r.created_at) <= ?`;
+                params.push(date_to);
+            }
+            
+            if (has_comment === 'true') {
+                whereClause += ` AND r.comment IS NOT NULL AND r.comment != ''`;
+            } else if (has_comment === 'false') {
+                whereClause += ` AND (r.comment IS NULL OR r.comment = '')`;
+            }
+            
+            if (search && search.trim()) {
+                whereClause += ` AND (r.comment LIKE ? OR u.email LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                params.push(searchTerm, searchTerm);
+            }
+            
+            const query = `
+                SELECT r.id, r.rating, r.comment, r.created_at, u.email AS user_email
+                FROM support_ratings r
+                LEFT JOIN users u ON u.id = r.user_id
+                ${whereClause}
+                ORDER BY r.id DESC
+            `;
+            
+            rows = await db.prepare(query).all(...params);
+        }
+        
         res.json({ ok: true, items: rows, total: rows.length });
     } catch (error) {
         console.error('Support ratings query error:', error);
@@ -3679,14 +3854,23 @@ app.get('/api/featured', async (req, res) => {
 });
 
 // Featured products endpoints
-app.get('/api/admin/featured', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/featured', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const stmt = db.prepare(`
-            SELECT * FROM featured_products 
-            ORDER BY display_order ASC
-        `);
-        
-        const featured = stmt.all();
+        let featured;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('featured_products')
+                .select('*')
+                .order('display_order', { ascending: true });
+            if (error) throw error;
+            featured = data || [];
+        } else {
+            const stmt = db.prepare(`
+                SELECT * FROM featured_products 
+                ORDER BY display_order ASC
+            `);
+            featured = await stmt.all();
+        }
         res.json({ ok: true, items: featured });
     } catch (error) {
         console.error('Featured products fetch error:', error);
@@ -3694,7 +3878,7 @@ app.get('/api/admin/featured', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.post('/api/admin/featured', requireAuth, requireAdmin, (req, res) => {
+app.post('/api/admin/featured', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { name, platform, price, discount, badge, icon, display_order } = req.body;
         
@@ -3702,18 +3886,37 @@ app.post('/api/admin/featured', requireAuth, requireAdmin, (req, res) => {
             return res.status(400).json({ ok: false, error: 'missing_info' });
         }
         
-        const stmt = db.prepare(`
-            INSERT INTO featured_products 
-            (name, platform, price, discount, badge, icon, display_order) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
-        
-        const result = stmt.run(name, platform, price, discount || 0, badge || null, icon, display_order || 1);
+        let id;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('featured_products')
+                .insert({ 
+                    name, 
+                    platform, 
+                    price, 
+                    discount: discount || 0, 
+                    badge: badge || null, 
+                    icon, 
+                    display_order: display_order || 1 
+                })
+                .select('id')
+                .single();
+            if (error) throw error;
+            id = data.id;
+        } else {
+            const stmt = db.prepare(`
+                INSERT INTO featured_products 
+                (name, platform, price, discount, badge, icon, display_order) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
+            const result = await stmt.run(name, platform, price, discount || 0, badge || null, icon, display_order || 1);
+            id = result.lastInsertRowid;
+        }
         
         res.json({ 
             ok: true, 
             message: 'Öne çıkan ürün eklendi',
-            id: result.lastInsertRowid 
+            id 
         });
     } catch (error) {
         console.error('Featured product add error:', error);
@@ -3721,7 +3924,7 @@ app.post('/api/admin/featured', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.put('/api/admin/featured/:id', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/admin/featured/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, platform, price, discount, badge, icon, display_order } = req.body;
@@ -3730,13 +3933,28 @@ app.put('/api/admin/featured/:id', requireAuth, requireAdmin, (req, res) => {
             return res.status(400).json({ ok: false, error: 'missing_info' });
         }
         
-        const stmt = db.prepare(`
-            UPDATE featured_products 
-            SET name = ?, platform = ?, price = ?, discount = ?, badge = ?, icon = ?, display_order = ?
-            WHERE id = ?
-        `);
-        
-        stmt.run(name, platform, price, discount || 0, badge || null, icon, display_order || 1, id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('featured_products')
+                .update({ 
+                    name, 
+                    platform, 
+                    price, 
+                    discount: discount || 0, 
+                    badge: badge || null, 
+                    icon, 
+                    display_order: display_order || 1 
+                })
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            const stmt = db.prepare(`
+                UPDATE featured_products 
+                SET name = ?, platform = ?, price = ?, discount = ?, badge = ?, icon = ?, display_order = ?
+                WHERE id = ?
+            `);
+            await stmt.run(name, platform, price, discount || 0, badge || null, icon, display_order || 1, id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3748,12 +3966,20 @@ app.put('/api/admin/featured/:id', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.delete('/api/admin/featured/:id', requireAuth, requireAdmin, (req, res) => {
+app.delete('/api/admin/featured/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        const stmt = db.prepare('DELETE FROM featured_products WHERE id = ?');
-        stmt.run(id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('featured_products')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            const stmt = db.prepare('DELETE FROM featured_products WHERE id = ?');
+            await stmt.run(id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3766,19 +3992,40 @@ app.delete('/api/admin/featured/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: Coupon management
-app.get('/api/admin/coupons', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/coupons', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const coupons = db.prepare(`
-            SELECT c.*, 
-                   COALESCE(cu.used_count, 0) as used_count
-            FROM coupons c
-            LEFT JOIN (
-                SELECT coupon_id, COUNT(*) as used_count
-                FROM coupon_usage
-                GROUP BY coupon_id
-            ) cu ON c.id = cu.coupon_id
-            ORDER BY c.created_at DESC
-        `).all();
+        let coupons;
+        if (db.supabase) {
+            const { data: couponsData, error } = await db.supabase
+                .from('coupons')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            
+            // Get used counts for each coupon
+            const couponsWithUsage = await Promise.all((couponsData || []).map(async (c) => {
+                const { count } = await db.supabase
+                    .from('coupon_usage')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('coupon_id', c.id);
+                
+                return { ...c, used_count: count || 0 };
+            }));
+            
+            coupons = couponsWithUsage;
+        } else {
+            coupons = await db.prepare(`
+                SELECT c.*, 
+                       COALESCE(cu.used_count, 0) as used_count
+                FROM coupons c
+                LEFT JOIN (
+                    SELECT coupon_id, COUNT(*) as used_count
+                    FROM coupon_usage
+                    GROUP BY coupon_id
+                ) cu ON c.id = cu.coupon_id
+                ORDER BY c.created_at DESC
+            `).all();
+        }
         
         res.json({ ok: true, items: coupons });
         
@@ -3788,13 +4035,26 @@ app.get('/api/admin/coupons', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.get('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/coupons/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        const coupon = db.prepare(`
-            SELECT * FROM coupons WHERE id = ?
-        `).get(id);
+        let coupon;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('coupons')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (error || !data) {
+                return res.status(404).json({ ok: false, error: 'coupon_not_found' });
+            }
+            coupon = data;
+        } else {
+            coupon = await db.prepare(`
+                SELECT * FROM coupons WHERE id = ?
+            `).get(id);
+        }
         
         if (!coupon) {
             return res.status(404).json({ ok: false, error: 'coupon_not_found' });
@@ -3808,7 +4068,7 @@ app.get('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.post('/api/admin/coupons', requireAuth, requireAdmin, (req, res) => {
+app.post('/api/admin/coupons', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { code, type, value, min_order_amount, max_uses, valid_until, is_active } = req.body;
         
@@ -3816,15 +4076,35 @@ app.post('/api/admin/coupons', requireAuth, requireAdmin, (req, res) => {
             return res.status(400).json({ ok: false, error: 'missing_info' });
         }
         
-        const result = db.prepare(`
-            INSERT INTO coupons (code, type, value, min_order_amount, max_uses, valid_until, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(code, type, value, min_order_amount || 0, max_uses || -1, valid_until || null, is_active !== false ? 1 : 0);
+        let id;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('coupons')
+                .insert({ 
+                    code, 
+                    type, 
+                    value, 
+                    min_order_amount: min_order_amount || 0, 
+                    max_uses: max_uses || -1, 
+                    valid_until: valid_until || null, 
+                    is_active: is_active !== false 
+                })
+                .select('id')
+                .single();
+            if (error) throw error;
+            id = data.id;
+        } else {
+            const result = await db.prepare(`
+                INSERT INTO coupons (code, type, value, min_order_amount, max_uses, valid_until, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(code, type, value, min_order_amount || 0, max_uses || -1, valid_until || null, is_active !== false ? 1 : 0);
+            id = result.lastInsertRowid;
+        }
         
         res.json({ 
             ok: true, 
             message: 'Kupon başarıyla eklendi',
-            id: result.lastInsertRowid 
+            id 
         });
         
     } catch (error) {
@@ -3833,7 +4113,7 @@ app.post('/api/admin/coupons', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.put('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/admin/coupons/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { code, type, value, min_order_amount, max_uses, valid_until, is_active } = req.body;
@@ -3842,11 +4122,27 @@ app.put('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
             return res.status(400).json({ ok: false, error: 'missing_info' });
         }
         
-        db.prepare(`
-            UPDATE coupons 
-            SET code = ?, type = ?, value = ?, min_order_amount = ?, max_uses = ?, valid_until = ?, is_active = ?
-            WHERE id = ?
-        `).run(code, type, value, min_order_amount || 0, max_uses || -1, valid_until || null, is_active ? 1 : 0, id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('coupons')
+                .update({ 
+                    code, 
+                    type, 
+                    value, 
+                    min_order_amount: min_order_amount || 0, 
+                    max_uses: max_uses || -1, 
+                    valid_until: valid_until || null, 
+                    is_active: is_active ? true : false 
+                })
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare(`
+                UPDATE coupons 
+                SET code = ?, type = ?, value = ?, min_order_amount = ?, max_uses = ?, valid_until = ?, is_active = ?
+                WHERE id = ?
+            `).run(code, type, value, min_order_amount || 0, max_uses || -1, valid_until || null, is_active ? 1 : 0, id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3859,11 +4155,19 @@ app.put('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.delete('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
+app.delete('/api/admin/coupons/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        db.prepare('DELETE FROM coupons WHERE id = ?').run(id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('coupons')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM coupons WHERE id = ?').run(id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3877,15 +4181,41 @@ app.delete('/api/admin/coupons/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: Product reviews management
-app.get('/api/admin/reviews', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/reviews', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const reviews = db.prepare(`
-            SELECT r.*, p.name as product_name, u.name as user_name, u.email as user_email
-            FROM product_reviews r
-            JOIN products p ON p.id = r.product_id
-            JOIN users u ON u.id = r.user_id
-            ORDER BY r.created_at DESC
-        `).all();
+        let reviews;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('product_reviews')
+                .select(`
+                    *,
+                    products (
+                        name
+                    ),
+                    users (
+                        name,
+                        email
+                    )
+                `)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            
+            reviews = (data || []).map(r => ({
+                ...r,
+                product_name: r.products?.name || null,
+                user_name: r.users?.name || null,
+                user_email: r.users?.email || null
+            }));
+        } else {
+            reviews = await db.prepare(`
+                SELECT r.*, p.name as product_name, u.name as user_name, u.email as user_email
+                FROM product_reviews r
+                JOIN products p ON p.id = r.product_id
+                JOIN users u ON u.id = r.user_id
+                ORDER BY r.created_at DESC
+            `).all();
+        }
         
         res.json({ ok: true, items: reviews });
         
@@ -3895,16 +4225,24 @@ app.get('/api/admin/reviews', requireAuth, requireAdmin, (req, res) => {
     }
 });
 
-app.put('/api/admin/reviews/:id/approve', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/admin/reviews/:id/approve', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         const { is_approved } = req.body;
         
-        db.prepare(`
-            UPDATE product_reviews 
-            SET is_approved = ?
-            WHERE id = ?
-        `).run(is_approved ? 1 : 0, id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('product_reviews')
+                .update({ is_approved: is_approved ? true : false })
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare(`
+                UPDATE product_reviews 
+                SET is_approved = ?
+                WHERE id = ?
+            `).run(is_approved ? 1 : 0, id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3917,24 +4255,46 @@ app.put('/api/admin/reviews/:id/approve', requireAuth, requireAdmin, (req, res) 
     }
 });
 
-app.put('/api/admin/reviews/:id/toggle-approval', requireAuth, requireAdmin, (req, res) => {
+app.put('/api/admin/reviews/:id/toggle-approval', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
         // Get current approval status
-        const review = db.prepare('SELECT is_approved FROM product_reviews WHERE id = ?').get(id);
+        let review;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('product_reviews')
+                .select('is_approved')
+                .eq('id', id)
+                .single();
+            if (error || !data) {
+                return res.status(404).json({ ok: false, error: 'review_not_found' });
+            }
+            review = data;
+        } else {
+            review = await db.prepare('SELECT is_approved FROM product_reviews WHERE id = ?').get(id);
+        }
+        
         if (!review) {
             return res.status(404).json({ ok: false, error: 'review_not_found' });
         }
         
         // Toggle the approval status
-        const newStatus = review.is_approved ? 0 : 1;
+        const newStatus = review.is_approved ? false : true;
         
-        db.prepare(`
-            UPDATE product_reviews 
-            SET is_approved = ?
-            WHERE id = ?
-        `).run(newStatus, id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('product_reviews')
+                .update({ is_approved: newStatus })
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare(`
+                UPDATE product_reviews 
+                SET is_approved = ?
+                WHERE id = ?
+            `).run(newStatus ? 1 : 0, id);
+        }
         
         res.json({ 
             ok: true, 
@@ -3948,11 +4308,19 @@ app.put('/api/admin/reviews/:id/toggle-approval', requireAuth, requireAdmin, (re
     }
 });
 
-app.delete('/api/admin/reviews/:id', requireAuth, requireAdmin, (req, res) => {
+app.delete('/api/admin/reviews/:id', requireAuth, requireAdmin, async (req, res) => {
     try {
         const { id } = req.params;
         
-        db.prepare('DELETE FROM product_reviews WHERE id = ?').run(id);
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('product_reviews')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM product_reviews WHERE id = ?').run(id);
+        }
         
         res.json({ 
             ok: true, 
@@ -4021,47 +4389,97 @@ function sendMailSafe({ to, subject, text }) {
 }
 
 // Dashboard statistics
-app.get('/api/admin/dashboard/stats', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/dashboard/stats', requireAuth, requireAdmin, async (req, res) => {
     try {
-        // User statistics
-        const userStats = db.prepare(`
-            SELECT 
-                COUNT(*) as total_users,
-                COUNT(CASE WHEN email_verified = 1 THEN 1 END) as verified_users,
-                COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_users
-            FROM users
-        `).get();
+        let userStats, productStats, ratingStats, recentUsers, recentRatings;
         
-        // Product statistics
-        const productStats = db.prepare(`
-            SELECT 
-                COUNT(*) as total_products,
-                COUNT(DISTINCT category) as total_categories,
-                AVG(price) as avg_price
-            FROM products
-        `).get();
-        
-        // Support rating statistics
-        const ratingStats = db.prepare(`
-            SELECT 
-                COUNT(*) as total_ratings,
-                AVG(rating) as avg_rating,
-                COUNT(CASE WHEN comment IS NOT NULL AND comment != '' THEN 1 END) as ratings_with_comments
-            FROM support_ratings
-        `).get();
-        
-        // Recent activity
-        const recentUsers = db.prepare(`
-            SELECT name, email, created_at FROM users 
-            ORDER BY created_at DESC LIMIT 5
-        `).all();
-        
-        const recentRatings = db.prepare(`
-            SELECT r.rating, r.comment, r.created_at, u.email as user_email
-            FROM support_ratings r
-            LEFT JOIN users u ON u.id = r.user_id
-            ORDER BY r.created_at DESC LIMIT 5
-        `).all();
+        if (db.supabase) {
+            // User statistics
+            const [usersData, productsData, ratingsData, recentUsersData, recentRatingsData] = await Promise.all([
+                db.supabase.from('users').select('id, email_verified, role'),
+                db.supabase.from('products').select('id, category, price'),
+                db.supabase.from('support_ratings').select('id, rating, comment'),
+                db.supabase.from('users').select('name, email, created_at').order('created_at', { ascending: false }).limit(5),
+                db.supabase.from('support_ratings').select('rating, comment, created_at, users (email)').order('created_at', { ascending: false }).limit(5)
+            ]);
+            
+            const users = usersData.data || [];
+            userStats = {
+                total_users: users.length,
+                verified_users: users.filter(u => u.email_verified).length,
+                admin_users: users.filter(u => u.role === 'admin').length
+            };
+            
+            const products = productsData.data || [];
+            const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+            const prices = products.map(p => p.price).filter(p => p != null);
+            productStats = {
+                total_products: products.length,
+                total_categories: categories.length,
+                avg_price: prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0
+            };
+            
+            const ratings = ratingsData.data || [];
+            const ratingValues = ratings.map(r => r.rating).filter(r => r != null);
+            ratingStats = {
+                total_ratings: ratings.length,
+                avg_rating: ratingValues.length > 0 ? ratingValues.reduce((a, b) => a + b, 0) / ratingValues.length : 0,
+                ratings_with_comments: ratings.filter(r => r.comment && r.comment.trim()).length
+            };
+            
+            recentUsers = (recentUsersData.data || []).map(u => ({
+                name: u.name,
+                email: u.email,
+                created_at: u.created_at
+            }));
+            
+            recentRatings = (recentRatingsData.data || []).map(r => ({
+                rating: r.rating,
+                comment: r.comment,
+                created_at: r.created_at,
+                user_email: r.users?.email || null
+            }));
+        } else {
+            // User statistics
+            userStats = await db.prepare(`
+                SELECT 
+                    COUNT(*) as total_users,
+                    COUNT(CASE WHEN email_verified = 1 THEN 1 END) as verified_users,
+                    COUNT(CASE WHEN role = 'admin' THEN 1 END) as admin_users
+                FROM users
+            `).get();
+            
+            // Product statistics
+            productStats = await db.prepare(`
+                SELECT 
+                    COUNT(*) as total_products,
+                    COUNT(DISTINCT category) as total_categories,
+                    AVG(price) as avg_price
+                FROM products
+            `).get();
+            
+            // Support rating statistics
+            ratingStats = await db.prepare(`
+                SELECT 
+                    COUNT(*) as total_ratings,
+                    AVG(rating) as avg_rating,
+                    COUNT(CASE WHEN comment IS NOT NULL AND comment != '' THEN 1 END) as ratings_with_comments
+                FROM support_ratings
+            `).get();
+            
+            // Recent activity
+            recentUsers = await db.prepare(`
+                SELECT name, email, created_at FROM users 
+                ORDER BY created_at DESC LIMIT 5
+            `).all();
+            
+            recentRatings = await db.prepare(`
+                SELECT r.rating, r.comment, r.created_at, u.email as user_email
+                FROM support_ratings r
+                LEFT JOIN users u ON u.id = r.user_id
+                ORDER BY r.created_at DESC LIMIT 5
+            `).all();
+        }
         
         res.json({
             ok: true,
