@@ -5,7 +5,7 @@
       "destination": "/api/index.js"
     },
     {
-      "source": "/((?!.*\\.(css|js|png|jpg|jpeg|gif|svg|ico|json|woff|woff2|ttf|eot|webp|sw\\.js|manifest\\.json)).*)",
+      "source": "/((?!.*\\.(css|js|png|jpg|jpeg|gif|svg|ico|json|woff|woff2|ttf|eot|webp|sw\\.js|manifest\\.json|map|txt|md|sql|log)).*)",
       "destination": "/api/index.js"
     }
   ]
