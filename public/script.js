@@ -6503,18 +6503,6 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       }
       
       console.log('❌ Steam paketleri bulunamadı');
-        console.log('🔄 Fallback Steam paketler:', fallbackPackets.length, 'adet');
-        
-        if (fallbackPackets.length > 0) {
-          grid.innerHTML = '';
-          fallbackPackets.forEach(p => {
-            const card = createProductCard(p);
-            grid.appendChild(card);
-          });
-          
-          return; // Fonksiyonu bitir
-        }
-      }
     }
 
     // Kategori: Valorant genel listede üçlü Rastgele VP paketlerini gizle
