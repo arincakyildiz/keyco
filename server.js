@@ -1349,18 +1349,18 @@ app.get('/api/products', async (req, res) => {
                 query = query.or(`name.ilike.${searchTerm},description.ilike.${searchTerm},description_en.ilike.${searchTerm},slug.ilike.${searchTerm}`);
             }
             
-            // Category filter - check both category and platform fields
-            // Frontend sends category as 'valorant', 'lol', 'steam' which matches platform
+            // Category filter - frontend sends category as 'valorant', 'lol', 'steam'
+            // These values typically match the platform field in the database
             if (category && category !== 'all') {
                 const categoryLower = category.toLowerCase();
-                // Check both category and platform fields since they might be used interchangeably
-                query = query.or(`category.eq.${categoryLower},platform.eq.${categoryLower}`);
+                // First try platform field (most common case)
+                query = query.eq('platform', categoryLower);
             }
             
             // Platform filter
             if (platform && platform !== 'all') {
                 const platformLower = platform.toLowerCase();
-                query = query.or(`platform.eq.${platformLower},category.eq.${platformLower}`);
+                query = query.eq('platform', platformLower);
             }
             
             // Package level filter
