@@ -6503,11 +6503,6 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       }
       
       console.log('❌ Steam paketleri bulunamadı');
-        // Fallback olarak package_level ile ara
-        const fallbackPackets = items.filter(p => 
-          (p.category||'').toLowerCase() === 'steam' && 
-          ['low', 'medium', 'high'].includes((p.package_level||'').toLowerCase())
-        );
         console.log('🔄 Fallback Steam paketler:', fallbackPackets.length, 'adet');
         
         if (fallbackPackets.length > 0) {

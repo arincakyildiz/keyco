@@ -311,12 +311,13 @@ async function seedData() {
         { name: 'LoL Rastgele RP (Orta Paket)', slug: 'lol-rp-random-orta', description: 'LoL Rastgele RP - Orta Paket', price: 45000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp2.png' },
         { name: 'LoL Rastgele RP (Yüksek Paket)', slug: 'lol-rp-random-yuksek', description: 'LoL Rastgele RP - Yüksek Paket', price: 80000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp3.png' },
         
-        // Steam Products
-        // Normal Steam ürünleri: hepsi st.png kullanır
-        // Fiyatlar TL cinsinden (kuruş: TL * 100, örn: 299₺ = 29900)
-        { name: 'Steam Cüzdan Kodu 50 TL', slug: 'steam-wallet-50tl', description: '50 TL Steam Cüzdan Kodu', price: 5000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
-        { name: 'Steam Cüzdan Kodu 100 TL', slug: 'steam-wallet-100tl', description: '100 TL Steam Cüzdan Kodu', price: 10000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
-        { name: 'Steam Cüzdan Kodu 200 TL', slug: 'steam-wallet-200tl', description: '200 TL Steam Cüzdan Kodu', price: 20000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'high', discount: 0, image_url: 'st.png' },
+        // Steam Cüzdan Kodları (Steam'deki gerçek değerler: $5, $10, $25, $50, $100)
+        // Fiyatlar TL cinsinden (1 USD ≈ 32 TRY)
+        { name: 'Steam Cüzdan Kodu 5 USD', slug: 'steam-wallet-5usd', description: '5 USD Steam Cüzdan Kodu', price: 16000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 10 USD', slug: 'steam-wallet-10usd', description: '10 USD Steam Cüzdan Kodu', price: 32000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 25 USD', slug: 'steam-wallet-25usd', description: '25 USD Steam Cüzdan Kodu', price: 80000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 50 USD', slug: 'steam-wallet-50usd', description: '50 USD Steam Cüzdan Kodu', price: 160000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
+        { name: 'Steam Cüzdan Kodu 100 USD', slug: 'steam-wallet-100usd', description: '100 USD Steam Cüzdan Kodu', price: 320000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'high', discount: 0, image_url: 'st.png' },
         
         // Popüler Steam Oyunları (fiyatlar TL cinsinden, görseller slug.png formatında)
         { name: 'The Witcher 3: Wild Hunt', slug: 'the-witcher-3', description: 'The Witcher 3: Wild Hunt Steam Key', price: 128000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'the-witcher-3.png' },
@@ -378,14 +379,16 @@ async function seedData() {
       console.log('✅ Products seeded');
     }
     
-    // Seed featured products
+    // Seed featured products (popüler 2025 oyunları)
     const { data: featured } = await db.supabase.from('featured_products').select('id').limit(1);
     if (!featured || featured.length === 0) {
       await db.supabase.from('featured_products').insert([
-        { name: 'Cyberpunk 2077', platform: 'Steam', price: 599, discount: 10, badge: 'new', icon: 'fas fa-fire', display_order: 1 },
-        { name: 'Grand Theft Auto V', platform: 'Epic Games', price: 299, discount: 5, badge: 'sale', icon: 'fas fa-tag', display_order: 2 },
-        { name: 'Elden Ring', platform: 'Steam', price: 699, discount: 0, badge: 'hot', icon: 'fas fa-star', display_order: 3 },
-        { name: 'Red Dead Redemption 2', platform: 'Rockstar', price: 499, discount: 0, badge: 'new', icon: 'fas fa-plus', display_order: 4 }
+        { name: 'Baldur\'s Gate 3', platform: 'Steam', price: 899, discount: 0, badge: 'hot', icon: 'fas fa-dragon', display_order: 1, image: 'baldurs-gate-3.png' },
+        { name: 'Hogwarts Legacy', platform: 'Steam', price: 1299, discount: 10, badge: 'sale', icon: 'fas fa-magic', display_order: 2, image: 'hogwarts-legacy.png' },
+        { name: 'Starfield', platform: 'Steam', price: 999, discount: 0, badge: 'new', icon: 'fas fa-rocket', display_order: 3, image: 'starfield.png' },
+        { name: 'Palworld', platform: 'Steam', price: 399, discount: 0, badge: 'hot', icon: 'fas fa-paw', display_order: 4, image: 'palworld.png' },
+        { name: 'Elden Ring', platform: 'Steam', price: 699, discount: 0, badge: 'hot', icon: 'fas fa-crown', display_order: 5, image: 'elden-ring.png' },
+        { name: 'Cyberpunk 2077', platform: 'Steam', price: 599, discount: 10, badge: 'sale', icon: 'fas fa-gamepad', display_order: 6, image: 'cyberpunk-2077.png' }
       ]);
     }
 
