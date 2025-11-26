@@ -291,11 +291,21 @@ async function seedData() {
         { name: 'Valorant 5350 VP', slug: 'valorant-5350-vp', description: '5350 Valorant VP', price: 123000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp2.png' },
         { name: 'Valorant 11000 VP', slug: 'valorant-11000-vp', description: '11000 Valorant VP', price: 245000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'high', discount: 0, image_url: 'vp2.png' },
         
+        // Valorant Rastgele VP Paketleri (3 ayrı paket: düşük, orta, yüksek)
+        { name: 'Valorant Rastgele VP (Düşük Paket)', slug: 'valorant-vp-random-dusuk', description: 'Valorant Rastgele VP - Düşük Paket', price: 15000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'random', discount: 0, image_url: 'vp.png' },
+        { name: 'Valorant Rastgele VP (Orta Paket)', slug: 'valorant-vp-random-orta', description: 'Valorant Rastgele VP - Orta Paket', price: 35000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'random', discount: 0, image_url: 'vp1.png' },
+        { name: 'Valorant Rastgele VP (Yüksek Paket)', slug: 'valorant-vp-random-yuksek', description: 'Valorant Rastgele VP - Yüksek Paket', price: 70000, currency: 'TRY', category: 'valorant', platform: 'valorant', package_level: 'random', discount: 0, image_url: 'vp2.png' },
+        
         // League of Legends Products
         { name: 'League of Legends RP 650', slug: 'lol-rp-650', description: '650 League of Legends RP', price: 15000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'low', discount: 0, image_url: 'rp.png' },
         { name: 'League of Legends RP 1380', slug: 'lol-rp-1380', description: '1380 League of Legends RP', price: 30000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
         { name: 'League of Legends RP 2800', slug: 'lol-rp-2800', description: '2800 League of Legends RP', price: 60000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'medium', discount: 0, image_url: 'rp.png' },
         { name: 'League of Legends RP 5000', slug: 'lol-rp-5000', description: '5000 League of Legends RP', price: 100000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'high', discount: 0, image_url: 'rp.png' },
+        
+        // LoL Rastgele RP Paketleri (3 ayrı paket: düşük, orta, yüksek)
+        { name: 'LoL Rastgele RP (Düşük Paket)', slug: 'lol-rp-random-dusuk', description: 'LoL Rastgele RP - Düşük Paket', price: 20000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp.png' },
+        { name: 'LoL Rastgele RP (Orta Paket)', slug: 'lol-rp-random-orta', description: 'LoL Rastgele RP - Orta Paket', price: 45000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp2.png' },
+        { name: 'LoL Rastgele RP (Yüksek Paket)', slug: 'lol-rp-random-yuksek', description: 'LoL Rastgele RP - Yüksek Paket', price: 80000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp3.png' },
         
         // Steam Products
         { name: 'Steam Cüzdan Kodu 50 TL', slug: 'steam-wallet-50tl', description: '50 TL Steam Cüzdan Kodu', price: 5000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
