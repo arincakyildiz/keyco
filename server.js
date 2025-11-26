@@ -247,107 +247,193 @@ app.post('/api/auth/register', [
 });
 
 // Confirm registration code -> create real user and sign in
-app.post('/api/auth/register/confirm', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email, code } = req.body;
-    const row = db.prepare('SELECT id, name, email, password_hash, code AS pcode, expires_at FROM pending_users WHERE email = ?').get(email);
-    if (!row) return res.status(400).json({ ok: false, error: 'invalid_email' });
-    if (row.pcode !== String(code)) return res.status(400).json({ ok: false, error: 'invalid_code' });
-    if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
-    const info = db.prepare('INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, 1)')
-        .run(row.name, row.email, row.password_hash, 'user');
-    db.prepare('DELETE FROM pending_users WHERE id = ?').run(row.id);
-    const user = { id: info.lastInsertRowid, name: row.name, email: row.email, role: 'user' };
-    const jwtToken = signToken(user);
-    const oneWeek = 7 * 24 * 60 * 60;
-    res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
-    res.json({ ok: true, user, token: jwtToken });
+app.post('/api/auth/register/confirm', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email, code } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('pending_users')
+                .select('id, name, email, password_hash, code, expires_at')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'invalid_email' });
+            row = { ...data, pcode: data.code };
+        } else {
+            row = await db.prepare('SELECT id, name, email, password_hash, code AS pcode, expires_at FROM pending_users WHERE email = ?').get(email);
+        }
+        
+        if (!row) return res.status(400).json({ ok: false, error: 'invalid_email' });
+        if (row.pcode !== String(code)) return res.status(400).json({ ok: false, error: 'invalid_code' });
+        if (new Date(row.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
+        
+        let user;
+        if (db.supabase) {
+            const { data: newUser, error } = await db.supabase
+                .from('users')
+                .insert({ name: row.name, email: row.email, password_hash: row.password_hash, role: 'user', email_verified: true })
+                .select('id, name, email, role')
+                .single();
+            if (error) throw error;
+            user = newUser;
+            await db.supabase.from('pending_users').delete().eq('id', row.id);
+        } else {
+            const info = await db.prepare('INSERT INTO users (name, email, password_hash, role, email_verified) VALUES (?, ?, ?, ?, 1)')
+                .run(row.name, row.email, row.password_hash, 'user');
+            await db.prepare('DELETE FROM pending_users WHERE id = ?').run(row.id);
+            user = { id: info.lastInsertRowid, name: row.name, email: row.email, role: 'user' };
+        }
+        
+        const jwtToken = signToken(user);
+        const oneWeek = 7 * 24 * 60 * 60;
+        res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
+        res.json({ ok: true, user, token: jwtToken });
+    } catch (error) {
+        console.error('Register confirm error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Resend code for pending registration
-app.post('/api/auth/register/resend-code', [ body('email').isEmail() ], (req, res) => {
-    const { email } = req.body;
-    const row = db.prepare('SELECT id FROM pending_users WHERE email = ?').get(email);
-    if (!row) return res.json({ ok: true });
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
-    db.prepare('UPDATE pending_users SET code=?, expires_at=? WHERE id=?').run(code, expires, row.id);
-    if ((process.env.NODE_ENV || 'development') !== 'production') {
-        console.log('DEBUG REGISTER CODE (RESEND):', email, code);
+app.post('/api/auth/register/resend-code', [ body('email').isEmail() ], async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('pending_users')
+                .select('id')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.json({ ok: true });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id FROM pending_users WHERE email = ?').get(email);
+        }
+        
+        if (!row) return res.json({ ok: true });
+        
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('pending_users')
+                .update({ code, expires_at: expires })
+                .eq('id', row.id);
+        } else {
+            await db.prepare('UPDATE pending_users SET code=?, expires_at=? WHERE id=?').run(code, expires, row.id);
+        }
+        
+        if ((process.env.NODE_ENV || 'development') !== 'production') {
+            console.log('DEBUG REGISTER CODE (RESEND):', email, code);
+        }
+        sendMailSafe({ to: email, subject: 'Keyco - Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}` });
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Resend code error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    sendMailSafe({ to: email, subject: 'Keyco - Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}` });
-    res.json({ ok: true });
 });
 
 app.post('/api/auth/login', [
     body('email').isEmail().withMessage('email'),
     body('password').isLength({ min: 6 }).withMessage('password')
-], (req, res) => {
-    console.log('=== LOGIN REQUEST ===');
-    console.log('Request body:', req.body);
-    console.log('Request headers:', req.headers);
-    
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        console.log('Login validation errors:', errors.array());
-        return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    }
-    const { email, password, remember } = req.body || {};
-    const row = db.prepare('SELECT id, name, email, password_hash, role, email_verified FROM users WHERE email = ?').get(email);
-    if (!row) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-    const ok = bcrypt.compareSync(password, row.password_hash);
-    if (!ok) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
-    if (!row.email_verified) return res.status(403).json({ ok: false, error: 'email_not_verified' });
-    
-    // Check if user has a valid trusted device cookie (remember me)
-    console.log('Checking for trusted device cookie...');
-    console.log('Cookie header:', req.headers.cookie);
-    
-    const cookies = req.headers.cookie?.split(';').reduce((acc, cookie) => {
-        const [key, value] = cookie.trim().split('=');
-        acc[key] = value;
-        return acc;
-    }, {}) || {};
-    
-    console.log('Parsed cookies:', Object.keys(cookies));
-    
-    const trustedToken = cookies.trusted_device;
-    console.log('Trusted device token found:', !!trustedToken);
-    
-    if (trustedToken) {
-        try {
-            const decoded = jwt.verify(decodeURIComponent(trustedToken), JWT_SECRET);
-            console.log('Decoded trusted device token:', { userId: decoded.userId, type: decoded.type });
-            
-            if (decoded.userId === row.id && decoded.type === 'trusted_device') {
-                // Valid trusted device, skip OTP
-                console.log('✅ Trusted device verified! Skipping OTP for user:', row.email);
-                const user = { id: row.id, name: row.name, email: row.email, role: row.role, email_verified: 1 };
-                const jwtToken = signToken(user, '15d');
-                const fifteenDays = 15 * 24 * 60 * 60;
-                res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${fifteenDays}; Path=/; HttpOnly; SameSite=Lax`);
-                return res.json({ ok: true, user, token: jwtToken });
-            } else {
-                console.log('Trusted device token user ID mismatch');
-            }
-        } catch (e) {
-            console.log('Invalid or expired trusted device token:', e.message);
-        }
-    }
-    
-    // Generate OTP and send via email
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 2 * 60 * 1000).toISOString();
-    db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, code, 'login_otp', expires);
+], async (req, res) => {
     try {
-        sendMailSafe({ to: row.email, subject: 'Keyco - Giriş Doğrulama Kodu', text: `Giriş doğrulama kodunuz: ${code}. Kod 2 dakika boyunca geçerlidir.` });
-    } catch (_) {}
-    if ((process.env.NODE_ENV || 'development') !== 'production') {
-        console.log('DEBUG LOGIN OTP:', row.email, code);
+        console.log('=== LOGIN REQUEST ===');
+        console.log('Request body:', req.body);
+        console.log('Request headers:', req.headers);
+        
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            console.log('Login validation errors:', errors.array());
+            return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        }
+        const { email, password, remember } = req.body || {};
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, name, email, password_hash, role, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, name, email, password_hash, role, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!row) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+        const ok = bcrypt.compareSync(password, row.password_hash);
+        if (!ok) return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+        if (!row.email_verified) return res.status(403).json({ ok: false, error: 'email_not_verified' });
+        
+        // Check if user has a valid trusted device cookie (remember me)
+        console.log('Checking for trusted device cookie...');
+        console.log('Cookie header:', req.headers.cookie);
+        
+        const cookies = req.headers.cookie?.split(';').reduce((acc, cookie) => {
+            const [key, value] = cookie.trim().split('=');
+            acc[key] = value;
+            return acc;
+        }, {}) || {};
+        
+        console.log('Parsed cookies:', Object.keys(cookies));
+        
+        const trustedToken = cookies.trusted_device;
+        console.log('Trusted device token found:', !!trustedToken);
+        
+        if (trustedToken) {
+            try {
+                const decoded = jwt.verify(decodeURIComponent(trustedToken), JWT_SECRET);
+                console.log('Decoded trusted device token:', { userId: decoded.userId, type: decoded.type });
+                
+                if (decoded.userId === row.id && decoded.type === 'trusted_device') {
+                    // Valid trusted device, skip OTP
+                    console.log('✅ Trusted device verified! Skipping OTP for user:', row.email);
+                    const user = { id: row.id, name: row.name, email: row.email, role: row.role, email_verified: 1 };
+                    const jwtToken = signToken(user, '15d');
+                    const fifteenDays = 15 * 24 * 60 * 60;
+                    res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${fifteenDays}; Path=/; HttpOnly; SameSite=Lax`);
+                    return res.json({ ok: true, user, token: jwtToken });
+                } else {
+                    console.log('Trusted device token user ID mismatch');
+                }
+            } catch (e) {
+                console.log('Invalid or expired trusted device token:', e.message);
+            }
+        }
+        
+        // Generate OTP and send via email
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('auth_tokens')
+                .insert({ user_id: row.id, token: code, type: 'login_otp', expires_at: expires });
+        } else {
+            await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(row.id, code, 'login_otp', expires);
+        }
+        
+        try {
+            sendMailSafe({ to: row.email, subject: 'Keyco - Giriş Doğrulama Kodu', text: `Giriş doğrulama kodunuz: ${code}. Kod 2 dakika boyunca geçerlidir.` });
+        } catch (_) {}
+        if ((process.env.NODE_ENV || 'development') !== 'production') {
+            console.log('DEBUG LOGIN OTP:', row.email, code);
+        }
+        console.log('Login successful, OTP sent to:', row.email);
+        res.json({ ok: true, step: 'otp_required', remember });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    console.log('Login successful, OTP sent to:', row.email);
-    res.json({ ok: true, step: 'otp_required', remember });
 });
 
 app.get('/api/auth/me', requireAuth, (req, res) => {
@@ -361,52 +447,121 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 // Email verification via code
-app.post('/api/auth/verify/code', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email, code } = req.body;
-    const user = db.prepare('SELECT id, name, email, role, email_verified FROM users WHERE email = ?').get(email);
-    if (!user) return res.status(400).json({ ok: false, error: 'invalid_email' });
-    if (user.email_verified) {
-        const tokenExisting = signToken({ id: user.id, name: user.name, email: user.email, role: user.role });
+app.post('/api/auth/verify/code', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email, code } = req.body;
+        
+        let user;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, name, email, role, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'invalid_email' });
+            user = data;
+        } else {
+            user = await db.prepare('SELECT id, name, email, role, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!user) return res.status(400).json({ ok: false, error: 'invalid_email' });
+        if (user.email_verified) {
+            const tokenExisting = signToken({ id: user.id, name: user.name, email: user.email, role: user.role });
+            const oneWeek = 7 * 24 * 60 * 60;
+            res.setHeader('Set-Cookie', `token=${encodeURIComponent(tokenExisting)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
+            return res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, token: tokenExisting });
+        }
+        
+        let tokenRow;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('auth_tokens')
+                .select('id, expires_at, used')
+                .eq('user_id', user.id)
+                .eq('type', 'verify')
+                .eq('token', String(code))
+                .order('id', { ascending: false })
+                .limit(1)
+                .single();
+            if (error || !data) return res.status(400).json({ ok: false, error: 'invalid_code' });
+            tokenRow = data;
+        } else {
+            tokenRow = await db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(user.id, 'verify', String(code));
+        }
+        
+        if (!tokenRow) return res.status(400).json({ ok: false, error: 'invalid_code' });
+        if (tokenRow.used) return res.status(400).json({ ok: false, error: 'used_code' });
+        if (new Date(tokenRow.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
+        
+        if (db.supabase) {
+            await db.supabase.from('users').update({ email_verified: true }).eq('id', user.id);
+            await db.supabase.from('auth_tokens').update({ used: true }).eq('id', tokenRow.id);
+        } else {
+            await db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(user.id);
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
+        }
+        
+        const jwtToken = signToken({ id: user.id, name: user.name, email: user.email, role: user.role });
         const oneWeek = 7 * 24 * 60 * 60;
-        res.setHeader('Set-Cookie', `token=${encodeURIComponent(tokenExisting)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
-        return res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, token: tokenExisting });
+        res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
+        res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, token: jwtToken });
+    } catch (error) {
+        console.error('Verify code error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    const tokenRow = db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(user.id, 'verify', String(code));
-    if (!tokenRow) return res.status(400).json({ ok: false, error: 'invalid_code' });
-    if (tokenRow.used) return res.status(400).json({ ok: false, error: 'used_code' });
-    if (new Date(tokenRow.expires_at).getTime() < Date.now()) return res.status(400).json({ ok: false, error: 'expired_code' });
-    db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(user.id);
-    db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
-    const jwtToken = signToken({ id: user.id, name: user.name, email: user.email, role: user.role });
-    const oneWeek = 7 * 24 * 60 * 60;
-    res.setHeader('Set-Cookie', `token=${encodeURIComponent(jwtToken)}; Max-Age=${oneWeek}; Path=/; HttpOnly; SameSite=Lax`);
-    res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role }, token: jwtToken });
 });
 
 // Resend verification code
-app.post('/api/auth/verify/resend-code', [ body('email').isEmail() ], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { email } = req.body;
-    const user = db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
-    if (!user) return res.json({ ok: true });
-    if (user.email_verified) return res.json({ ok: true });
-    const code = generateCode6();
-    const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
-    db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, code, 'verify', expires);
-    try { sendMailSafe({ to: email, subject: 'Keyco - Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}` }); } catch (_) {}
-    res.json({ ok: true });
+app.post('/api/auth/verify/resend-code', [ body('email').isEmail() ], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { email } = req.body;
+        
+        let user;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) return res.json({ ok: true });
+            user = data;
+        } else {
+            user = await db.prepare('SELECT id, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
+        if (!user) return res.json({ ok: true });
+        if (user.email_verified) return res.json({ ok: true });
+        
+        const code = generateCode6();
+        const expires = new Date(Date.now() + 24*60*60*1000).toISOString();
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('auth_tokens')
+                .insert({ user_id: user.id, token: code, type: 'verify', expires_at: expires });
+        } else {
+            await db.prepare('INSERT INTO auth_tokens (user_id, token, type, expires_at) VALUES (?, ?, ?, ?)').run(user.id, code, 'verify', expires);
+        }
+        
+        try { sendMailSafe({ to: email, subject: 'Keyco - Doğrulama Kodu (Yeniden)', text: `Kodunuz: ${code}` }); } catch (_) {}
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Resend verify code error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Login OTP verify
-app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], (req, res) => {
-    console.log('=== OTP VERIFICATION REQUEST ===');
-    console.log('Request body:', req.body);
-    console.log('Request headers:', req.headers);
-    
+app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').isLength({ min: 6, max: 6 }) ], async (req, res) => {
     try {
+        console.log('=== OTP VERIFICATION REQUEST ===');
+        console.log('Request body:', req.body);
+        console.log('Request headers:', req.headers);
+        
         const errors = validationResult(req);
         if (!errors.isEmpty()) {
             console.log('Validation errors:', errors.array());
@@ -420,7 +575,22 @@ app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').i
         const { email, code, remember } = req.body;
         console.log('OTP verification attempt:', { email, code: code ? '***' : 'undefined' });
         
-        const row = db.prepare('SELECT id, name, email, role, email_verified FROM users WHERE email = ?').get(email);
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('users')
+                .select('id, name, email, role, email_verified')
+                .eq('email', email)
+                .single();
+            if (error || !data) {
+                console.log('User not found for email:', email);
+                return res.status(401).json({ ok: false, error: 'invalid_credentials' });
+            }
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, name, email, role, email_verified FROM users WHERE email = ?').get(email);
+        }
+        
         if (!row) {
             console.log('User not found for email:', email);
             return res.status(401).json({ ok: false, error: 'invalid_credentials' });
@@ -430,17 +600,43 @@ app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').i
             return res.status(403).json({ ok: false, error: 'email_not_verified' });
         }
         
-        const tokenRow = db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(row.id, 'login_otp', String(code));
-        console.log('Database query result:', tokenRow);
-        console.log('Looking for OTP code:', String(code), 'for user:', row.id);
-        
-        if (!tokenRow) {
-            console.log('Invalid OTP code for user:', row.id, 'code:', code);
-            // Let's check what tokens exist for this user
-            const existingTokens = db.prepare('SELECT token, used, expires_at FROM auth_tokens WHERE user_id = ? AND type = ? ORDER BY id DESC LIMIT 5').all(row.id, 'login_otp');
-            console.log('Existing OTP tokens for user:', existingTokens);
-            return res.status(400).json({ ok: false, error: 'invalid_code' });
+        let tokenRow;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('auth_tokens')
+                .select('id, expires_at, used')
+                .eq('user_id', row.id)
+                .eq('type', 'login_otp')
+                .eq('token', String(code))
+                .order('id', { ascending: false })
+                .limit(1)
+                .single();
+            if (error || !data) {
+                console.log('Invalid OTP code for user:', row.id, 'code:', code);
+                const { data: existingTokens } = await db.supabase
+                    .from('auth_tokens')
+                    .select('token, used, expires_at')
+                    .eq('user_id', row.id)
+                    .eq('type', 'login_otp')
+                    .order('id', { ascending: false })
+                    .limit(5);
+                console.log('Existing OTP tokens for user:', existingTokens);
+                return res.status(400).json({ ok: false, error: 'invalid_code' });
+            }
+            tokenRow = data;
+        } else {
+            tokenRow = await db.prepare('SELECT id, expires_at, used FROM auth_tokens WHERE user_id = ? AND type = ? AND token = ? ORDER BY id DESC').get(row.id, 'login_otp', String(code));
+            console.log('Database query result:', tokenRow);
+            console.log('Looking for OTP code:', String(code), 'for user:', row.id);
+            
+            if (!tokenRow) {
+                console.log('Invalid OTP code for user:', row.id, 'code:', code);
+                const existingTokens = await db.prepare('SELECT token, used, expires_at FROM auth_tokens WHERE user_id = ? AND type = ? ORDER BY id DESC LIMIT 5').all(row.id, 'login_otp');
+                console.log('Existing OTP tokens for user:', existingTokens);
+                return res.status(400).json({ ok: false, error: 'invalid_code' });
+            }
         }
+        
         if (tokenRow.used) {
             console.log('OTP code already used for user:', row.id);
             return res.status(400).json({ ok: false, error: 'used_code' });
@@ -451,7 +647,11 @@ app.post('/api/auth/login/verify-otp', [ body('email').isEmail(), body('code').i
         }
         
         // Mark token as used
-        db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
+        if (db.supabase) {
+            await db.supabase.from('auth_tokens').update({ used: true }).eq('id', tokenRow.id);
+        } else {
+            await db.prepare('UPDATE auth_tokens SET used = 1 WHERE id = ?').run(tokenRow.id);
+        }
         
         // Create user object and JWT token
         const user = { id: row.id, name: row.name, email: row.email, role: row.role, email_verified: 1 };
@@ -687,27 +887,59 @@ app.get('/api/categories', (req, res) => {
 });
 
 // Admin products endpoint
-app.get('/api/admin/products', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/products', requireAuth, requireAdmin, async (req, res) => {
     try {
-        // Check if products table has any data
-        const count = db.prepare('SELECT COUNT(*) as count FROM products').get();
-        
-        if (count.count === 0) {
-            return res.json({ ok: true, items: [], total: 0 });
+        let rows;
+        if (db.supabase) {
+            // Get products with code counts
+            const { data: products, error: productsError } = await db.supabase
+                .from('products')
+                .select('id, name, slug, price, currency, category, platform, package_level, description, discount, created_at')
+                .order('id', { ascending: false });
+            
+            if (productsError) throw productsError;
+            
+            // Get code counts for each product
+            const productsWithCodes = await Promise.all((products || []).map(async (p) => {
+                const { data: codes, error: codesError } = await db.supabase
+                    .from('product_codes')
+                    .select('id, is_used')
+                    .eq('product_id', p.id);
+                
+                if (codesError) {
+                    console.error('Error fetching codes for product', p.id, codesError);
+                    return { ...p, total_codes: 0, available_codes: 0 };
+                }
+                
+                const total_codes = codes?.length || 0;
+                const available_codes = codes?.filter(c => !c.is_used).length || 0;
+                
+                return { ...p, total_codes, available_codes };
+            }));
+            
+            rows = productsWithCodes;
+        } else {
+            // Check if products table has any data
+            const count = await db.prepare('SELECT COUNT(*) as count FROM products').get();
+            
+            if (count.count === 0) {
+                return res.json({ ok: true, items: [], total: 0 });
+            }
+            
+            const query = `
+                SELECT 
+                    p.id, p.name, p.slug, p.price, p.currency, p.category, p.platform, 
+                    p.package_level, p.description, p.discount, p.created_at,
+                    COUNT(pc.id) as total_codes,
+                    COUNT(CASE WHEN pc.is_used = 0 THEN 1 END) as available_codes
+                FROM products p
+                LEFT JOIN product_codes pc ON p.id = pc.product_id
+                GROUP BY p.id
+                ORDER BY p.id DESC
+            `;
+            rows = await db.prepare(query).all();
         }
         
-        const query = `
-            SELECT 
-                p.id, p.name, p.slug, p.price, p.currency, p.category, p.platform, 
-                p.package_level, p.description, p.discount, p.created_at,
-                COUNT(pc.id) as total_codes,
-                COUNT(CASE WHEN pc.is_used = 0 THEN 1 END) as available_codes
-            FROM products p
-            LEFT JOIN product_codes pc ON p.id = pc.product_id
-            GROUP BY p.id
-            ORDER BY p.id DESC
-        `;
-        const rows = db.prepare(query).all();
         res.json({ ok: true, items: rows, total: rows.length });
     } catch (error) {
         console.error('Admin products query error:', error);
@@ -845,66 +1077,146 @@ app.post('/api/products', requireAuth, requireAdmin, [
     body('name').trim().isLength({ min: 2 }).withMessage('name'),
     body('slug').trim().isLength({ min: 2 }).withMessage('slug'),
     body('price').isInt({ min: 0 }).withMessage('price')
-], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const { name, slug, description, price, currency = 'TRY', category, platform, package_level, discount = 0 } = req.body;
+], async (req, res) => {
     try {
-        // Insert into products table
-        const info = db.prepare('INSERT INTO products (name, slug, description, price, currency, category, platform, package_level, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(name, slug, description || null, price, currency, category || null, platform || null, package_level || null, discount);
-        const product = db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const { name, slug, description, price, currency = 'TRY', category, platform, package_level, discount = 0 } = req.body;
         
-        // Optionally add to featured products only when requested
-        if (req.body && req.body.add_to_featured === true) {
-            try {
-                const maxOrder = db.prepare('SELECT MAX(display_order) as max_order FROM featured_products').get();
-                const nextOrder = (maxOrder?.max_order || 0) + 1;
-                // Convert price from kuruş to TL for featured products
-                const priceInTL = price / 100;
-                db.prepare('INSERT INTO featured_products (name, platform, price, discount, badge, icon, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
-                    .run(name, platform || 'Steam', priceInTL, discount, 'new', 'fas fa-plus', nextOrder);
-            } catch (featuredError) {
-                console.log('Could not add to featured products:', featuredError.message);
+        let product;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .insert({ name, slug, description: description || null, price, currency, category: category || null, platform: platform || null, package_level: package_level || null, discount })
+                .select()
+                .single();
+            
+            if (error) {
+                if (error.code === '23505') { // Unique constraint violation
+                    return res.status(409).json({ ok: false, error: 'slug_exists' });
+                }
+                throw error;
+            }
+            product = data;
+            
+            // Optionally add to featured products
+            if (req.body && req.body.add_to_featured === true) {
+                try {
+                    const { data: maxOrderData } = await db.supabase
+                        .from('featured_products')
+                        .select('display_order')
+                        .order('display_order', { ascending: false })
+                        .limit(1)
+                        .single();
+                    const nextOrder = (maxOrderData?.display_order || 0) + 1;
+                    const priceInTL = price / 100;
+                    await db.supabase
+                        .from('featured_products')
+                        .insert({ name, platform: platform || 'Steam', price: priceInTL, discount, badge: 'new', icon: 'fas fa-plus', display_order: nextOrder });
+                } catch (featuredError) {
+                    console.log('Could not add to featured products:', featuredError.message);
+                }
+            }
+        } else {
+            const info = await db.prepare('INSERT INTO products (name, slug, description, price, currency, category, platform, package_level, discount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .run(name, slug, description || null, price, currency, category || null, platform || null, package_level || null, discount);
+            product = await db.prepare('SELECT * FROM products WHERE id = ?').get(info.lastInsertRowid);
+            
+            if (req.body && req.body.add_to_featured === true) {
+                try {
+                    const maxOrder = await db.prepare('SELECT MAX(display_order) as max_order FROM featured_products').get();
+                    const nextOrder = (maxOrder?.max_order || 0) + 1;
+                    const priceInTL = price / 100;
+                    await db.prepare('INSERT INTO featured_products (name, platform, price, discount, badge, icon, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)')
+                        .run(name, platform || 'Steam', priceInTL, discount, 'new', 'fas fa-plus', nextOrder);
+                } catch (featuredError) {
+                    console.log('Could not add to featured products:', featuredError.message);
+                }
             }
         }
         
         res.json({ ok: true, product });
     } catch (e) {
-        if (String(e.message || '').includes('UNIQUE constraint failed')) {
+        if (String(e.message || '').includes('UNIQUE constraint failed') || String(e.message || '').includes('23505')) {
             return res.status(409).json({ ok: false, error: 'slug_exists' });
         }
-        throw e;
+        console.error('Create product error:', e);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
 });
 
 // Get single product by ID
-app.get('/api/products/:id', (req, res) => {
-    const id = Number(req.params.id);
-    if (isNaN(id)) {
-        return res.status(400).json({ ok: false, error: 'invalid_id' });
+app.get('/api/products/:id', async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        if (isNaN(id)) {
+            return res.status(400).json({ ok: false, error: 'invalid_id' });
+        }
+        
+        let product;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (error || !data) {
+                return res.status(404).json({ ok: false, error: 'product_not_found' });
+            }
+            product = data;
+        } else {
+            product = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+            if (!product) {
+                return res.status(404).json({ ok: false, error: 'product_not_found' });
+            }
+        }
+        
+        res.json(product);
+    } catch (error) {
+        console.error('Get product error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-    if (!product) {
-        return res.status(404).json({ ok: false, error: 'product_not_found' });
-    }
-    
-    res.json(product);
 });
 
 app.put('/api/products/:id', requireAuth, requireAdmin, [
     body('name').optional().isLength({ min: 2 }).withMessage('name'),
     body('price').optional().isInt({ min: 0 }).withMessage('price')
-], (req, res) => {
-    const id = Number(req.params.id);
-    const cur = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
-    if (!cur) return res.status(404).json({ ok: false, error: 'not_found' });
-    const { name = cur.name, slug = cur.slug, description = cur.description, price = cur.price, currency = cur.currency, category = cur.category, platform = cur.platform, package_level = cur.package_level, discount = cur.discount } = req.body || {};
+], async (req, res) => {
     try {
-        db.prepare('UPDATE products SET name=?, slug=?, description=?, price=?, currency=?, category=?, platform=?, package_level=?, discount=? WHERE id = ?')
-          .run(name, slug, description, price, currency, category, platform, package_level, discount, id);
-        const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+        const id = Number(req.params.id);
+        
+        let cur;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            cur = data;
+        } else {
+            cur = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+            if (!cur) return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        
+        const { name = cur.name, slug = cur.slug, description = cur.description, price = cur.price, currency = cur.currency, category = cur.category, platform = cur.platform, package_level = cur.package_level, discount = cur.discount } = req.body || {};
+        
+        let updated;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .update({ name, slug, description, price, currency, category, platform, package_level, discount })
+                .eq('id', id)
+                .select()
+                .single();
+            if (error) throw error;
+            updated = data;
+        } else {
+            await db.prepare('UPDATE products SET name=?, slug=?, description=?, price=?, currency=?, category=?, platform=?, package_level=?, discount=? WHERE id = ?')
+              .run(name, slug, description, price, currency, category, platform, package_level, discount, id);
+            updated = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+        }
+        
         res.json({ ok: true, product: updated });
     } catch (e) {
         if (String(e.message || '').includes('UNIQUE constraint failed')) {
@@ -914,47 +1226,135 @@ app.put('/api/products/:id', requireAuth, requireAdmin, [
     }
 });
 
-app.delete('/api/products/:id', requireAuth, requireAdmin, (req, res) => {
-    const id = Number(req.params.id);
-    const cur = db.prepare('SELECT id FROM products WHERE id = ?').get(id);
-    if (!cur) return res.status(404).json({ ok: false, error: 'not_found' });
-    db.prepare('DELETE FROM products WHERE id = ?').run(id);
-    res.json({ ok: true });
+app.delete('/api/products/:id', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        
+        let cur;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('id')
+                .eq('id', id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            cur = data;
+        } else {
+            cur = await db.prepare('SELECT id FROM products WHERE id = ?').get(id);
+            if (!cur) return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('products')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM products WHERE id = ?').run(id);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Delete product error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Orders
 app.post('/api/orders', requireAuth, [ 
     body('items').isArray({ min: 1 }).withMessage('items')
-], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const items = req.body.items;
-    // items: [{ product_id, quantity }]
-    const products = db.prepare('SELECT id, price FROM products WHERE id IN (' + items.map(() => '?').join(',') + ')').all(items.map(i => i.product_id));
-    const priceMap = new Map(products.map(p => [p.id, p.price]));
-    let total = 0;
-    for (const it of items) {
-        const unit = priceMap.get(it.product_id);
-        if (!unit) return res.status(400).json({ ok: false, error: 'invalid_product' });
-        const qty = Math.max(1, Number(it.quantity || 1));
-        total += unit * qty;
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const items = req.body.items;
+        
+        // items: [{ product_id, quantity }]
+        let products;
+        if (db.supabase) {
+            const productIds = items.map(i => i.product_id);
+            const { data, error } = await db.supabase
+                .from('products')
+                .select('id, price')
+                .in('id', productIds);
+            if (error) throw error;
+            products = data || [];
+        } else {
+            products = await db.prepare('SELECT id, price FROM products WHERE id IN (' + items.map(() => '?').join(',') + ')').all(items.map(i => i.product_id));
+        }
+        
+        const priceMap = new Map(products.map(p => [p.id, p.price]));
+        let total = 0;
+        for (const it of items) {
+            const unit = priceMap.get(it.product_id);
+            if (!unit) return res.status(400).json({ ok: false, error: 'invalid_product' });
+            const qty = Math.max(1, Number(it.quantity || 1));
+            total += unit * qty;
+        }
+        
+        let order, orderItems;
+        if (db.supabase) {
+            const { data: newOrder, error: orderError } = await db.supabase
+                .from('orders')
+                .insert({ user_id: req.user.id, total_price: total, currency: 'TRY', status: 'pending' })
+                .select()
+                .single();
+            if (orderError) throw orderError;
+            order = newOrder;
+            
+            // Insert order items
+            const orderItemsData = items.map(it => {
+                const unit = priceMap.get(it.product_id);
+                const qty = Math.max(1, Number(it.quantity || 1));
+                return { order_id: order.id, product_id: it.product_id, quantity: qty, unit_price: unit };
+            });
+            
+            const { data: insertedItems, error: itemsError } = await db.supabase
+                .from('order_items')
+                .insert(orderItemsData)
+                .select();
+            if (itemsError) throw itemsError;
+            orderItems = insertedItems || [];
+        } else {
+            const info = await db.prepare('INSERT INTO orders (user_id, total_price, currency, status) VALUES (?, ?, ?, ?)')
+                .run(req.user.id, total, 'TRY', 'pending');
+            const insItem = db.prepare('INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)');
+            for (const it of items) {
+                const unit = priceMap.get(it.product_id);
+                const qty = Math.max(1, Number(it.quantity || 1));
+                insItem.run(info.lastInsertRowid, it.product_id, qty, unit);
+            }
+            order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(info.lastInsertRowid);
+            orderItems = await db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
+        }
+        
+        res.json({ ok: true, order, items: orderItems });
+    } catch (error) {
+        console.error('Create order error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    const info = db.prepare('INSERT INTO orders (user_id, total_price, currency, status) VALUES (?, ?, ?, ?)')
-        .run(req.user.id, total, 'TRY', 'pending');
-    const insItem = db.prepare('INSERT INTO order_items (order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?)');
-    for (const it of items) {
-        const unit = priceMap.get(it.product_id);
-        const qty = Math.max(1, Number(it.quantity || 1));
-        insItem.run(info.lastInsertRowid, it.product_id, qty, unit);
-    }
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(info.lastInsertRowid);
-    const orderItems = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(order.id);
-    res.json({ ok: true, order, items: orderItems });
 });
 
-app.get('/api/orders', requireAuth, (req, res) => {
-    const rows = db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
-    res.json(rows);
+app.get('/api/orders', requireAuth, async (req, res) => {
+    try {
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('orders')
+                .select('*')
+                .eq('user_id', req.user.id)
+                .order('id', { ascending: false });
+            if (error) throw error;
+            rows = data || [];
+        } else {
+            rows = await db.prepare('SELECT * FROM orders WHERE user_id = ? ORDER BY id DESC').all(req.user.id);
+        }
+        res.json(rows);
+    } catch (error) {
+        console.error('Get orders error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Order tracking
@@ -1004,22 +1404,47 @@ app.post('/api/notifications/test', requireAuth, (req, res) => {
     }
 });
 
-app.get('/api/orders/:id/tracking', requireAuth, (req, res) => {
-    const orderId = Number(req.params.id);
-    
+app.get('/api/orders/:id/tracking', requireAuth, async (req, res) => {
     try {
+        const orderId = Number(req.params.id);
+        
         // Check if user owns this order
-        const order = db.prepare('SELECT id, status FROM orders WHERE id = ? AND user_id = ?').get(orderId, req.user.id);
-        if (!order) {
-            return res.status(404).json({ ok: false, error: 'order_not_found' });
+        let order;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('orders')
+                .select('id, status')
+                .eq('id', orderId)
+                .eq('user_id', req.user.id)
+                .single();
+            if (error || !data) {
+                return res.status(404).json({ ok: false, error: 'order_not_found' });
+            }
+            order = data;
+        } else {
+            order = await db.prepare('SELECT id, status FROM orders WHERE id = ? AND user_id = ?').get(orderId, req.user.id);
+            if (!order) {
+                return res.status(404).json({ ok: false, error: 'order_not_found' });
+            }
         }
         
-        const tracking = db.prepare(`
-            SELECT status, message, created_at
-            FROM order_tracking
-            WHERE order_id = ?
-            ORDER BY created_at ASC
-        `).all(orderId);
+        let tracking;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('order_tracking')
+                .select('status, message, created_at')
+                .eq('order_id', orderId)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            tracking = data || [];
+        } else {
+            tracking = await db.prepare(`
+                SELECT status, message, created_at
+                FROM order_tracking
+                WHERE order_id = ?
+                ORDER BY created_at ASC
+            `).all(orderId);
+        }
         
         res.json({
             ok: true,
@@ -1269,15 +1694,47 @@ app.delete('/api/admin/contacts/:id', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: list all orders
-app.get('/api/admin/orders', requireAuth, requireAdmin, (req, res) => {
+app.get('/api/admin/orders', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const rows = db.prepare(`
-            SELECT o.id, o.user_id, u.name as user_name, u.email as user_email, 
-                   o.total_price, o.currency, o.status, o.created_at 
-            FROM orders o
-            LEFT JOIN users u ON u.id = o.user_id
-            ORDER BY o.id DESC
-        `).all();
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('orders')
+                .select(`
+                    id,
+                    user_id,
+                    total_price,
+                    currency,
+                    status,
+                    created_at,
+                    users (
+                        name,
+                        email
+                    )
+                `)
+                .order('id', { ascending: false });
+            
+            if (error) throw error;
+            
+            rows = (data || []).map(order => ({
+                id: order.id,
+                user_id: order.user_id,
+                user_name: order.users?.name || null,
+                user_email: order.users?.email || null,
+                total_price: order.total_price,
+                currency: order.currency,
+                status: order.status,
+                created_at: order.created_at
+            }));
+        } else {
+            rows = await db.prepare(`
+                SELECT o.id, o.user_id, u.name as user_name, u.email as user_email, 
+                       o.total_price, o.currency, o.status, o.created_at 
+                FROM orders o
+                LEFT JOIN users u ON u.id = o.user_id
+                ORDER BY o.id DESC
+            `).all();
+        }
         
         res.json({ ok: true, items: rows, total: rows.length });
     } catch (error) {
@@ -1287,123 +1744,327 @@ app.get('/api/admin/orders', requireAuth, requireAdmin, (req, res) => {
 });
 
 // Admin: get items of an order
-app.get('/api/admin/orders/:id/items', requireAuth, requireAdmin, (req, res) => {
-    const id = Number(req.params.id);
-    const items = db.prepare('SELECT id, order_id, product_id, quantity, unit_price FROM order_items WHERE order_id = ?').all(id);
-    res.json(items);
+app.get('/api/admin/orders/:id/items', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const id = Number(req.params.id);
+        let items;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('order_items')
+                .select('id, order_id, product_id, quantity, unit_price')
+                .eq('order_id', id);
+            if (error) throw error;
+            items = data || [];
+        } else {
+            items = await db.prepare('SELECT id, order_id, product_id, quantity, unit_price FROM order_items WHERE order_id = ?').all(id);
+        }
+        res.json(items);
+    } catch (error) {
+        console.error('Get order items error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Admin: product codes CRUD
-app.get('/api/admin/products/:id/codes', requireAuth, requireAdmin, (req, res) => {
-    const productId = Number(req.params.id);
-    const rows = db.prepare('SELECT id, code, is_used, used_at, created_at FROM product_codes WHERE product_id = ? ORDER BY id DESC').all(productId);
-    res.json({ ok: true, items: rows, total: rows.length });
+app.get('/api/admin/products/:id/codes', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const productId = Number(req.params.id);
+        let rows;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('product_codes')
+                .select('id, code, is_used, used_at, created_at')
+                .eq('product_id', productId)
+                .order('id', { ascending: false });
+            if (error) throw error;
+            rows = data || [];
+        } else {
+            rows = await db.prepare('SELECT id, code, is_used, used_at, created_at FROM product_codes WHERE product_id = ? ORDER BY id DESC').all(productId);
+        }
+        res.json({ ok: true, items: rows, total: rows.length });
+    } catch (error) {
+        console.error('Get product codes error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 app.post('/api/admin/products/:id/codes', requireAuth, requireAdmin, [
     body('codes').isArray({ min: 1 }).withMessage('codes')
-], (req, res) => {
-    const productId = Number(req.params.id);
-    const { codes } = req.body || {};
-    const ins = db.prepare('INSERT OR IGNORE INTO product_codes (product_id, code) VALUES (?, ?)');
-    let inserted = 0;
-    for (const c of codes) {
-        if (typeof c === 'string' && c.trim()) {
-            const info = ins.run(productId, c.trim());
-            if (info.changes > 0) inserted++;
+], async (req, res) => {
+    try {
+        const productId = Number(req.params.id);
+        const { codes } = req.body || {};
+        
+        let inserted = 0;
+        if (db.supabase) {
+            const codesToInsert = codes
+                .filter(c => typeof c === 'string' && c.trim())
+                .map(c => ({ product_id: productId, code: c.trim() }));
+            
+            if (codesToInsert.length > 0) {
+                const { data, error } = await db.supabase
+                    .from('product_codes')
+                    .insert(codesToInsert)
+                    .select();
+                if (error && error.code !== '23505') throw error; // Ignore duplicate key errors
+                inserted = data?.length || 0;
+            }
+        } else {
+            const ins = db.prepare('INSERT OR IGNORE INTO product_codes (product_id, code) VALUES (?, ?)');
+            for (const c of codes) {
+                if (typeof c === 'string' && c.trim()) {
+                    const info = await ins.run(productId, c.trim());
+                    if (info.changes > 0) inserted++;
+                }
+            }
         }
+        
+        res.json({ ok: true, inserted });
+    } catch (error) {
+        console.error('Add product codes error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
     }
-    res.json({ ok: true, inserted });
 });
 
-app.delete('/api/admin/products/:id/codes/:codeId', requireAuth, requireAdmin, (req, res) => {
-    const productId = Number(req.params.id);
-    const codeId = Number(req.params.codeId);
-    const row = db.prepare('SELECT id, is_used FROM product_codes WHERE id = ? AND product_id = ?').get(codeId, productId);
-    if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
-    if (row.is_used) return res.status(400).json({ ok: false, error: 'already_used' });
-    db.prepare('DELETE FROM product_codes WHERE id = ?').run(codeId);
-    res.json({ ok: true });
+app.delete('/api/admin/products/:id/codes/:codeId', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const productId = Number(req.params.id);
+        const codeId = Number(req.params.codeId);
+        
+        let row;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('product_codes')
+                .select('id, is_used')
+                .eq('id', codeId)
+                .eq('product_id', productId)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            row = data;
+        } else {
+            row = await db.prepare('SELECT id, is_used FROM product_codes WHERE id = ? AND product_id = ?').get(codeId, productId);
+            if (!row) return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        
+        if (row.is_used) return res.status(400).json({ ok: false, error: 'already_used' });
+        
+        if (db.supabase) {
+            const { error } = await db.supabase
+                .from('product_codes')
+                .delete()
+                .eq('id', codeId);
+            if (error) throw error;
+        } else {
+            await db.prepare('DELETE FROM product_codes WHERE id = ?').run(codeId);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Delete product code error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // User: view delivered codes for an order
-app.get('/api/orders/:id/codes', requireAuth, (req, res) => {
-    const orderId = Number(req.params.id);
-    const own = db.prepare('SELECT 1 FROM orders WHERE id = ? AND user_id = ?').get(orderId, req.user.id);
-    if (!own) return res.status(404).json({ ok: false, error: 'order_not_found' });
-    const rows = db.prepare(`
-        SELECT oic.order_item_id, oic.product_id, oic.code, p.name AS product_name
-        FROM order_item_codes oic
-        LEFT JOIN products p ON p.id = oic.product_id
-        WHERE EXISTS (SELECT 1 FROM order_items oi WHERE oi.id = oic.order_item_id AND oi.order_id = ?)
-        ORDER BY oic.id ASC
-    `).all(orderId);
-    res.json({ ok: true, items: rows, total: rows.length });
+app.get('/api/orders/:id/codes', requireAuth, async (req, res) => {
+    try {
+        const orderId = Number(req.params.id);
+        
+        let own;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('orders')
+                .select('id')
+                .eq('id', orderId)
+                .eq('user_id', req.user.id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'order_not_found' });
+            own = data;
+        } else {
+            own = await db.prepare('SELECT 1 FROM orders WHERE id = ? AND user_id = ?').get(orderId, req.user.id);
+            if (!own) return res.status(404).json({ ok: false, error: 'order_not_found' });
+        }
+        
+        let rows;
+        if (db.supabase) {
+            // Get order items for this order
+            const { data: orderItems } = await db.supabase
+                .from('order_items')
+                .select('id')
+                .eq('order_id', orderId);
+            
+            const orderItemIds = (orderItems || []).map(oi => oi.id);
+            
+            if (orderItemIds.length > 0) {
+                const { data, error } = await db.supabase
+                    .from('order_item_codes')
+                    .select(`
+                        order_item_id,
+                        product_id,
+                        code,
+                        products (
+                            name
+                        )
+                    `)
+                    .in('order_item_id', orderItemIds)
+                    .order('id', { ascending: true });
+                
+                if (error) throw error;
+                
+                rows = (data || []).map(item => ({
+                    order_item_id: item.order_item_id,
+                    product_id: item.product_id,
+                    code: item.code,
+                    product_name: item.products?.name || null
+                }));
+            } else {
+                rows = [];
+            }
+        } else {
+            rows = await db.prepare(`
+                SELECT oic.order_item_id, oic.product_id, oic.code, p.name AS product_name
+                FROM order_item_codes oic
+                LEFT JOIN products p ON p.id = oic.product_id
+                WHERE EXISTS (SELECT 1 FROM order_items oi WHERE oi.id = oic.order_item_id AND oi.order_id = ?)
+                ORDER BY oic.id ASC
+            `).all(orderId);
+        }
+        
+        res.json({ ok: true, items: rows, total: rows.length });
+    } catch (error) {
+        console.error('Get order codes error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Admin: update order status
 app.put('/api/admin/orders/:id/status', requireAuth, requireAdmin, [
     body('status').isIn(['pending','processing','paid','shipped','delivered','cancelled']).withMessage('status')
-], (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
-    const id = Number(req.params.id);
-    const { status } = req.body;
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-    if (!order) return res.status(404).json({ ok: false, error: 'not_found' });
-    db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
-    db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
-      .run(id, status, `Durum güncellendi: ${status}`);
-    res.json({ ok: true });
+], async (req, res) => {
+    try {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) return res.status(400).json({ ok: false, errors: errors.array().map(e => e.param) });
+        const id = Number(req.params.id);
+        const { status } = req.body;
+        
+        let order;
+        if (db.supabase) {
+            const { data, error } = await db.supabase
+                .from('orders')
+                .select('*')
+                .eq('id', id)
+                .single();
+            if (error || !data) return res.status(404).json({ ok: false, error: 'not_found' });
+            order = data;
+        } else {
+            order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
+            if (!order) return res.status(404).json({ ok: false, error: 'not_found' });
+        }
+        
+        if (db.supabase) {
+            await db.supabase
+                .from('orders')
+                .update({ status })
+                .eq('id', id);
+            await db.supabase
+                .from('order_tracking')
+                .insert({ order_id: id, status, message: `Durum güncellendi: ${status}` });
+        } else {
+            await db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
+            await db.prepare('INSERT INTO order_tracking (order_id, status, message) VALUES (?, ?, ?)')
+              .run(id, status, `Durum güncellendi: ${status}`);
+        }
+        
+        res.json({ ok: true });
+    } catch (error) {
+        console.error('Update order status error:', error);
+        res.status(500).json({ ok: false, error: 'database_error' });
+    }
 });
 
 // Admin: list users
-app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
-    const { search, role, verified, date_from, date_to } = req.query;
-    
-    let whereClause = 'WHERE 1=1';
-    let params = [];
-    
-    // Search filter (name or email)
-    if (search && search.trim()) {
-        whereClause += ` AND (u.name LIKE ? OR u.email LIKE ?)`;
-        const searchTerm = `%${search.trim()}%`;
-        params.push(searchTerm, searchTerm);
-    }
-    
-    // Role filter
-    if (role && role !== 'all') {
-        whereClause += ` AND u.role = ?`;
-        params.push(role);
-    }
-    
-    // Verification filter
-    if (verified === 'true') {
-        whereClause += ` AND u.email_verified = 1`;
-    } else if (verified === 'false') {
-        whereClause += ` AND u.email_verified = 0`;
-    }
-    
-    // Date range filter
-    if (date_from) {
-        whereClause += ` AND DATE(u.created_at) >= ?`;
-        params.push(date_from);
-    }
-    
-    if (date_to) {
-        whereClause += ` AND DATE(u.created_at) <= ?`;
-        params.push(date_to);
-    }
-    
-    const query = `
-        SELECT u.id, u.name, u.email, u.role, u.email_verified, u.created_at
-        FROM users u
-        ${whereClause}
-        ORDER BY u.id DESC
-    `;
-    
+app.get('/api/admin/users', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const rows = db.prepare(query).all(...params);
+        const { search, role, verified, date_from, date_to } = req.query;
+        
+        let rows;
+        if (db.supabase) {
+            let query = db.supabase
+                .from('users')
+                .select('id, name, email, role, email_verified, created_at');
+            
+            // Search filter (name or email)
+            if (search && search.trim()) {
+                const searchTerm = `%${search.trim()}%`;
+                query = query.or(`name.ilike.${searchTerm},email.ilike.${searchTerm}`);
+            }
+            
+            // Role filter
+            if (role && role !== 'all') {
+                query = query.eq('role', role);
+            }
+            
+            // Verification filter
+            if (verified === 'true') {
+                query = query.eq('email_verified', true);
+            } else if (verified === 'false') {
+                query = query.eq('email_verified', false);
+            }
+            
+            // Date range filter
+            if (date_from) {
+                query = query.gte('created_at', date_from);
+            }
+            if (date_to) {
+                query = query.lte('created_at', date_to);
+            }
+            
+            query = query.order('id', { ascending: false });
+            
+            const { data, error } = await query;
+            if (error) throw error;
+            rows = data || [];
+        } else {
+            let whereClause = 'WHERE 1=1';
+            let params = [];
+            
+            if (search && search.trim()) {
+                whereClause += ` AND (u.name LIKE ? OR u.email LIKE ?)`;
+                const searchTerm = `%${search.trim()}%`;
+                params.push(searchTerm, searchTerm);
+            }
+            
+            if (role && role !== 'all') {
+                whereClause += ` AND u.role = ?`;
+                params.push(role);
+            }
+            
+            if (verified === 'true') {
+                whereClause += ` AND u.email_verified = 1`;
+            } else if (verified === 'false') {
+                whereClause += ` AND u.email_verified = 0`;
+            }
+            
+            if (date_from) {
+                whereClause += ` AND DATE(u.created_at) >= ?`;
+                params.push(date_from);
+            }
+            
+            if (date_to) {
+                whereClause += ` AND DATE(u.created_at) <= ?`;
+                params.push(date_to);
+            }
+            
+            const query = `
+                SELECT u.id, u.name, u.email, u.role, u.email_verified, u.created_at
+                FROM users u
+                ${whereClause}
+                ORDER BY u.id DESC
+            `;
+            
+            rows = await db.prepare(query).all(...params);
+        }
+        
         res.json({ ok: true, items: rows, total: rows.length });
     } catch (error) {
         console.error('Users query error:', error);
