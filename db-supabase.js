@@ -309,13 +309,14 @@ async function seedData() {
         { name: 'LoL Rastgele RP (Yüksek Paket)', slug: 'lol-rp-random-yuksek', description: 'LoL Rastgele RP - Yüksek Paket', price: 80000, currency: 'TRY', category: 'lol', platform: 'lol', package_level: 'random', discount: 0, image_url: 'rp3.png' },
         
         // Steam Products
+        // Normal Steam ürünleri: hepsi st.png kullanır
         { name: 'Steam Cüzdan Kodu 50 TL', slug: 'steam-wallet-50tl', description: '50 TL Steam Cüzdan Kodu', price: 5000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'low', discount: 0, image_url: 'st.png' },
         { name: 'Steam Cüzdan Kodu 100 TL', slug: 'steam-wallet-100tl', description: '100 TL Steam Cüzdan Kodu', price: 10000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'medium', discount: 0, image_url: 'st.png' },
         { name: 'Steam Cüzdan Kodu 200 TL', slug: 'steam-wallet-200tl', description: '200 TL Steam Cüzdan Kodu', price: 20000, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'high', discount: 0, image_url: 'st.png' },
-        { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077', description: 'Cyberpunk 2077 PC Oyunu', price: 59900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 10, image_url: 'https://image.example.com/cyberpunk.jpg' },
-        { name: 'Grand Theft Auto V', slug: 'gta-v', description: 'Grand Theft Auto V PC Oyunu', price: 29900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 5, image_url: 'https://image.example.com/gtav.jpg' },
-        { name: 'Elden Ring', slug: 'elden-ring', description: 'Elden Ring PC Oyunu', price: 69900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'https://image.example.com/eldenring.jpg' },
-        { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'https://image.example.com/rdr2.jpg' }
+        { name: 'Cyberpunk 2077', slug: 'cyberpunk-2077', description: 'Cyberpunk 2077 PC Oyunu', price: 59900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 10, image_url: 'st.png' },
+        { name: 'Grand Theft Auto V', slug: 'gta-v', description: 'Grand Theft Auto V PC Oyunu', price: 29900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 5, image_url: 'st.png' },
+        { name: 'Elden Ring', slug: 'elden-ring', description: 'Elden Ring PC Oyunu', price: 69900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' },
+        { name: 'Red Dead Redemption 2', slug: 'red-dead-redemption-2', description: 'Red Dead Redemption 2 PC Oyunu', price: 49900, currency: 'TRY', category: 'steam', platform: 'steam', package_level: 'standard', discount: 0, image_url: 'st.png' }
       ]);
       console.log('✅ Products seeded');
     }
