@@ -1350,10 +1350,11 @@ app.get('/api/products', async (req, res) => {
             }
             
             // Category filter - frontend sends category as 'valorant', 'lol', 'steam'
-            // Try platform field first (most common), then category field
+            // Check both platform and category fields
             if (category && category !== 'all') {
                 const categoryLower = category.toLowerCase();
-                // Use or() with simple eq() - Supabase PostgREST syntax
+                // Use or() with proper Supabase PostgREST syntax
+                // Format: column.operator.value,column.operator.value
                 query = query.or(`platform.eq.${categoryLower},category.eq.${categoryLower}`);
             }
             
@@ -1398,7 +1399,9 @@ app.get('/api/products', async (req, res) => {
             if (error) {
                 console.error('Products query error:', error);
                 console.error('Query details:', { category, platform, search });
-                throw error;
+                console.error('Error code:', error.code);
+                console.error('Error message:', error.message);
+                return res.status(500).json({ ok: false, error: 'database_error', details: error.message });
             }
             
             console.log(`Products query success: ${rows?.length || 0} products found for category=${category}, platform=${platform}`);
