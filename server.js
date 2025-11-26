@@ -2259,9 +2259,15 @@ app.use((err, req, res, next) => {
     res.status(err.status || 500).json({ ok: false, error: 'Internal Server Error' });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server listening on http://localhost:${PORT}`);
-});
+// Only start server if not in serverless environment (Vercel, Lambda, etc.)
+if (!isServerless) {
+    app.listen(PORT, () => {
+        console.log(`Server listening on http://localhost:${PORT}`);
+    });
+}
+
+// Export app for Vercel serverless functions
+module.exports = app;
 
 // best-effort email sender
 function sendMailSafe({ to, subject, text }) {
