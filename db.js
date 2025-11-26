@@ -3,11 +3,29 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-// Determine database path - use /tmp for Lambda, __dirname for local
+// Determine database path - use /tmp for serverless, __dirname for local
 let dbPath;
-if (process.env.LAMBDA_TASK_ROOT || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-  // AWS Lambda environment - use /tmp directory (writable)
+const isServerless = process.env.LAMBDA_TASK_ROOT || 
+                     process.env.AWS_LAMBDA_FUNCTION_NAME || 
+                     process.env.VERCEL || 
+                     process.env.VERCEL_ENV ||
+                     __dirname.startsWith('/var/task') ||
+                     __dirname.startsWith('/var/runtime');
+
+if (isServerless) {
+  // Serverless environment (Lambda, Vercel, etc.) - use /tmp directory (writable)
   dbPath = '/tmp/data.sqlite';
+  console.log('Serverless environment detected, using /tmp/data.sqlite');
+  
+  // Ensure /tmp directory exists
+  if (!fs.existsSync('/tmp')) {
+    try {
+      fs.mkdirSync('/tmp', { recursive: true });
+    } catch (e) {
+      console.error('Could not create /tmp directory:', e.message);
+    }
+  }
+  
   // Copy from __dirname to /tmp if source exists and /tmp doesn't
   const sourcePath = path.join(__dirname, 'data.sqlite');
   if (fs.existsSync(sourcePath) && !fs.existsSync(dbPath)) {
@@ -15,12 +33,13 @@ if (process.env.LAMBDA_TASK_ROOT || process.env.AWS_LAMBDA_FUNCTION_NAME) {
       fs.copyFileSync(sourcePath, dbPath);
       console.log('Database copied to /tmp/data.sqlite');
     } catch (e) {
-      console.log('Could not copy database to /tmp, will create new one');
+      console.log('Could not copy database to /tmp, will create new one:', e.message);
     }
   }
 } else {
   // Local environment
   dbPath = path.join(__dirname, 'data.sqlite');
+  console.log('Local environment detected, using:', dbPath);
 }
 
 // Ensure directory exists
@@ -28,6 +47,7 @@ const dbDir = path.dirname(dbPath);
 if (!fs.existsSync(dbDir)) {
   try {
     fs.mkdirSync(dbDir, { recursive: true });
+    console.log('Created database directory:', dbDir);
   } catch (e) {
     console.error('Could not create database directory:', e.message);
   }
@@ -35,20 +55,37 @@ if (!fs.existsSync(dbDir)) {
 
 let db;
 try {
-  db = new Database(dbPath);
-  console.log('Database opened at:', dbPath);
+  // Try to open database with WAL mode for better concurrency
+  db = new Database(dbPath, { 
+    verbose: process.env.NODE_ENV === 'development' ? console.log : null
+  });
+  // Enable WAL mode for better performance in serverless
+  db.pragma('journal_mode = WAL');
+  console.log('Database opened successfully at:', dbPath);
 } catch (error) {
   console.error('Failed to open database at:', dbPath);
-  console.error('Error:', error.message);
-  // Try fallback to __dirname if /tmp failed
-  if (dbPath !== path.join(__dirname, 'data.sqlite')) {
-    const fallbackPath = path.join(__dirname, 'data.sqlite');
-    console.log('Trying fallback path:', fallbackPath);
+  console.error('Error code:', error.code);
+  console.error('Error message:', error.message);
+  
+  // If we're in serverless and /tmp failed, try creating a new database
+  if (isServerless && dbPath === '/tmp/data.sqlite') {
+    console.log('Attempting to create new database at /tmp/data.sqlite');
     try {
-      db = new Database(fallbackPath);
-      console.log('Database opened at fallback path:', fallbackPath);
+      // Remove old file if it exists and is corrupted
+      if (fs.existsSync(dbPath)) {
+        try {
+          fs.unlinkSync(dbPath);
+          console.log('Removed corrupted database file');
+        } catch (e) {
+          console.log('Could not remove corrupted file:', e.message);
+        }
+      }
+      // Create new database
+      db = new Database(dbPath);
+      db.pragma('journal_mode = WAL');
+      console.log('New database created successfully at:', dbPath);
     } catch (e2) {
-      console.error('Fallback also failed:', e2.message);
+      console.error('Failed to create new database:', e2.message);
       throw error; // Throw original error
     }
   } else {
