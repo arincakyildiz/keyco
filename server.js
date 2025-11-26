@@ -4333,12 +4333,12 @@ app.delete('/api/admin/reviews/:id', requireAuth, requireAdmin, async (req, res)
     }
 });
 
-// Serve static files
-app.use(express.static(path.join(__dirname)));
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Admin UI is publicly served; API enforces auth. Login form lives in this page.
 app.get('/admin', (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // 404 for unmatched API routes
@@ -4348,7 +4348,7 @@ app.use('/api', (req, res) => {
 
 // SPA fallback to index.html for non-API routes (regex avoids path-to-regexp '*' issue)
 app.get(/^\/(?!api\/).*/, (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Error handler
