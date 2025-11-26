@@ -1350,17 +1350,17 @@ app.get('/api/products', async (req, res) => {
             }
             
             // Category filter - frontend sends category as 'valorant', 'lol', 'steam'
-            // These values typically match the platform field in the database
+            // Try platform field first (most common), then category field
             if (category && category !== 'all') {
                 const categoryLower = category.toLowerCase();
-                // First try platform field (most common case)
-                query = query.eq('platform', categoryLower);
+                // Use or() with simple eq() - Supabase PostgREST syntax
+                query = query.or(`platform.eq.${categoryLower},category.eq.${categoryLower}`);
             }
             
             // Platform filter
             if (platform && platform !== 'all') {
                 const platformLower = platform.toLowerCase();
-                query = query.eq('platform', platformLower);
+                query = query.or(`platform.eq.${platformLower},category.eq.${platformLower}`);
             }
             
             // Package level filter
@@ -1395,8 +1395,13 @@ app.get('/api/products', async (req, res) => {
             }
             
             const { data: rows, error } = await query;
-            if (error) throw error;
+            if (error) {
+                console.error('Products query error:', error);
+                console.error('Query details:', { category, platform, search });
+                throw error;
+            }
             
+            console.log(`Products query success: ${rows?.length || 0} products found for category=${category}, platform=${platform}`);
             res.json({ ok: true, items: rows || [], total: rows?.length || 0 });
         } else {
             // SQLite fallback
