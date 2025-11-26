@@ -6347,12 +6347,18 @@ async function loadCategoryProducts(categoryKey, opts = {}) {
       console.log('📦 Mevcut ürünler:', items.length);
       
       // Önce "random" package_level'ı veya slug'ında "random"/"rastgele" geçen özel paketleri bul
+      // Sadece "Düşük Paket", "Orta Paket", "Yüksek Paket" içeren ürünleri göster (basit "LoL Rastgele RP" hariç)
       const randomPackets = items.filter(p => {
         const slug = (p.slug || '').toLowerCase();
         const name = (p.name || '').toLowerCase();
         const packageLevel = (p.package_level || '').toLowerCase();
         const isLol = (p.category || '').toLowerCase() === 'lol' || (p.platform || '').toLowerCase() === 'lol';
-        return isLol && (
+        
+        // Sadece "Düşük Paket", "Orta Paket", "Yüksek Paket" içeren ürünleri göster
+        const hasPackageLevel = name.includes('düşük paket') || name.includes('orta paket') || name.includes('yüksek paket') ||
+                                slug.includes('dusuk') || slug.includes('orta') || slug.includes('yuksek');
+        
+        return isLol && hasPackageLevel && (
           packageLevel === 'random' || 
           slug.includes('random') || slug.includes('rastgele') ||
           name.includes('rastgele') || name.includes('random')
