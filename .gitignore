@@ -48,3 +48,12 @@ temp/
 .npm/
 .eslintcache
 
+# Temporary scripts
+check-*.js
+add-*.js
+update-*.js
+fix-*.js
+test-*.js
+verify-*.js
+download-*.js
+

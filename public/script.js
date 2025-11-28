@@ -1237,14 +1237,28 @@ async function loadFaqsFromApi() {
             return;
         }
 
-        // Remove previously injected API items but KEEP static ones
+        // Remove duplicates from mapped array (same title+content)
+        const seen = new Set();
+        mapped = mapped.filter(m => {
+            const key = `${m.title}|${m.content}`;
+            if (seen.has(key)) {
+                return false; // duplicate, skip
+            }
+            seen.add(key);
+            return true;
+        });
+
+        // Remove previously injected API items AND static ones (to avoid duplicates)
         container.querySelectorAll('[data-source="api"]').forEach(el => el.remove());
-        const existingCount = container.children.length;
+        // Remove static FAQ items (those without data-source="api" attribute)
+        container.querySelectorAll('.faq-item:not([data-source="api"])').forEach(el => el.remove());
+        
+        // Add API FAQs (now without duplicates)
         mapped.forEach((m, idx) => {
             const item = document.createElement('div');
             item.className = 'faq-item fade-in-up animate';
             item.setAttribute('data-source', 'api');
-            item.style.animationDelay = (0.05 * (existingCount + idx + 1)) + 's';
+            item.style.animationDelay = (0.05 * (idx + 1)) + 's';
             item.innerHTML = `
                 <button class="faq-toggle">
                     <span>${m.title}</span>
