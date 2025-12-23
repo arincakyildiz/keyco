@@ -279,8 +279,33 @@ CREATE TABLE IF NOT EXISTS order_item_codes (
 CREATE INDEX IF NOT EXISTS idx_order_item_codes_item ON order_item_codes(order_item_id);
 CREATE INDEX IF NOT EXISTS idx_order_item_codes_product ON order_item_codes(product_id);
 
--- Enable Row Level Security (RLS) - Optional, can be configured later
--- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE products ENABLE ROW LEVEL SECURITY;
--- etc.
+-- Row Level Security (RLS)
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT schemaname, tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+  LOOP
+    -- Enable RLS on every public table
+    EXECUTE format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY;', r.schemaname, r.tablename);
+
+    -- Ensure service_role can still perform full access for operational tasks
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_policies
+      WHERE schemaname = r.schemaname
+        AND tablename = r.tablename
+        AND policyname = 'service role full access'
+    ) THEN
+      EXECUTE format(
+        'CREATE POLICY "service role full access" ON %I.%I FOR ALL USING (auth.role() = ''service_role'') WITH CHECK (auth.role() = ''service_role'');',
+        r.schemaname,
+        r.tablename
+      );
+    END IF;
+  END LOOP;
+END $$;
 
